@@ -1,8 +1,9 @@
 # LBD_snRNA
-Characterize cell-type transcriptional alterations across neuropathologies.\
-Dementia pathologies elicit pronounced transcriptional responses in multiple cell types, including damaged and dying neurons, disease-associated microglia (DAM), and reactive disease-associated astrocytes (DAA). In Lewy body disease (LBD), increased SNCA (α-synuclein) expression leads to Lewy bodies' formation, particularly affecting dopaminergic neurons. In Alzheimer's disease (AD), elevated expression of amyloid precursor protein (APP) produces amyloid-β, a key component of amyloid plaques.\
+**Characterize cell-type transcriptional alterations across neuropathologies:**Dementia pathologies elicit pronounced transcriptional responses in multiple cell types, including damaged and dying neurons, disease-associated microglia (DAM), and reactive disease-associated astrocytes (DAA). In Lewy body disease (LBD), increased SNCA (α-synuclein) expression leads to Lewy bodies' formation, particularly affecting dopaminergic neurons. In Alzheimer's disease (AD), elevated expression of amyloid precursor protein (APP) produces amyloid-β, a key component of amyloid plaques.\
 The transcription patterns of cell types in cases with a combination of Aβ plaques, NFTs, and α-synuclein inclusions are not well understood. Thus this project explores:\
-  Aim 1.1 generates and characterizes snRNAseq data (5 per sex per neuropathology; N=40) to test the hypothesis that each neuropathological defined disease exhibits distinct cell-type transcriptional dysregulation.\
+
+Aim 1.1 generates and characterizes snRNAseq data (5 per sex per neuropathology; N=40) to test the hypothesis that each neuropathological defined disease exhibits distinct cell-type transcriptional dysregulation.\
+
 Moreover, studies have shown female-specific upregulation of DAM genes attributed to sex differences in microglial responses in AD cases.\
 Aim 1.2 will examine transcriptional sex differences among cell types, testing the hypothesis that XX females display more pronounced upregulation of DAM and DAA genes than XY males with similar neuropathological burdens.
 
