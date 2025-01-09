@@ -1,0 +1,1349 @@
+---
+title: "10X QC processing"
+author: "Kimberly Olney, PhD"
+date: "12/23/2024"
+output:
+  html_document:
+    theme: cerulean
+    toc: true
+    toc_float: true
+editor_options: 
+  chunk_output_type: inline
+---
+# Lewy body dementia center without walls LBD CWOW
+
+This workflow uses Seurat v5
+Layers in the Seurat v5 object: Seurat v5 assays store data in layers. These layers can store raw, un-normalized counts (layer='counts'), normalized data (layer='data'), or z-scored/variance-stabilized data (layer='scale.data'). 
+
+# Set working directory
+```{r working_directory}
+knitr::opts_knit$set(root.dir = ".")
+library(glmGamPoi)
+```
+
+# Libraris, paths, colors
+```{r echo=FALSE, message=FALSE}
+source(here::here("/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/scripts/", "file_paths_and_colours.R"))
+treatment <- "LBD"
+
+# Remove sample
+# metadata <- subset(metadata, sampleID != "P_60"  & sampleID != "B_6")
+metadata$sampleID <- factor(metadata$Sample_ID, levels = c(metadata$Sample_ID))
+samples <- metadata$sampleID 
+sex_order <- factor(metadata$sex_inferred, levels = unique(metadata$sex_inferred))
+disease_order <- factor(metadata$TYPE, levels = c("CONTROL", "AD_AT", "LBD_S", "LBD_AS", "LBD_ATS"))
+
+metadata <- metadata %>%
+  mutate(sampleID = gsub(".*_(\\d+)_.*_(BR_Nuclei).*", "\\2_\\1", Lane.Name))
+samples <- metadata$sampleID 
+
+# sampleID with disease_order
+order <- metadata %>%
+  arrange(disease_order) %>%
+  select(TYPE, sampleID, Sample_ID)
+write.table(order, "order.txt", quote = F, row.names = F, sep = "\t")
+samples <- order$sampleID
+disease_order <- order$TYPE
+sample_order <- factor(order$Sample_ID, levels = order$Sample_ID)
+```
+
+# Genes 
+```{r gene_info}
+if (file.exists("../rObjects/annotation.rds")) {
+  genes <- readRDS("../rObjects/annotation.rds")
+} else {
+  gtf.file <- paste0(pathToRef, "/genes/genes.gtf")
+  genes <- rtracklayer::import(gtf.file)
+  genes <- as.data.frame(genes)
+  genes <- genes[genes$type == "gene",]
+  saveRDS(genes, "../rObjects/annotation.rds")
+}
+
+gene_type_table <- table(genes$gene_type)
+write.table(gene_type_table, "gene_type_table.tsv", row.names = F, quote = F, sep = "\t")
+mt.genes.df <- subset(genes, seqnames == "chrM")
+mt.genes <- mt.genes.df$gene_name
+```
+
+# QC thresholds
+nCount_RNA = total number of transcripts (UMIs) in a single cell 
+nFeature_RNA = number of unique genes (features)
+```{r QC_metrics}
+nCount.min <- 500 
+nCount.max <- 85000 
+nFeature.min <- 300
+nFeature.max<- 12000
+complexity.cutoff <- 0.80
+mt.cutoff <- 1
+hb.cutoff <- 0
+ribo.cutoff <- 1
+choroid.cutoff <- 0
+```
+
+# Setup seurat object
+```{r seurat_object}
+prefix <- "../cellranger/"
+suffix <- "outs/filtered_feature_bc_matrix.h5"
+
+if (file.exists(paste0("../rObjects/", treatment, ".rds"))) {
+  dataObject <- readRDS(paste0("../rObjects/", treatment, ".rds"))
+} else {
+  for (i in samples) {
+    print(i)
+    obj <- CreateSeuratObject(Read10X_h5(paste0(prefix,i,"/",suffix)))
+    assign(i, obj)
+  }
+  # merge objects
+  dataObject <- merge(x = BR_Nuclei_0368,
+                 y = c(BR_Nuclei_0381, BR_Nuclei_0376, BR_Nuclei_0373, BR_Nuclei_0384, BR_Nuclei_0389, BR_Nuclei_0400, BR_Nuclei_0392, BR_Nuclei_0377, BR_Nuclei_0382, BR_Nuclei_0369, BR_Nuclei_0390, BR_Nuclei_0385, BR_Nuclei_0374, BR_Nuclei_0401, BR_Nuclei_0393, BR_Nuclei_0380, BR_Nuclei_0372, BR_Nuclei_0391, BR_Nuclei_0388, BR_Nuclei_0396, BR_Nuclei_0407, BR_Nuclei_0397, BR_Nuclei_0406, BR_Nuclei_0379, BR_Nuclei_0371, BR_Nuclei_0383, BR_Nuclei_0387, BR_Nuclei_0395, BR_Nuclei_0399, BR_Nuclei_0405, BR_Nuclei_0404, BR_Nuclei_0386, BR_Nuclei_0370, BR_Nuclei_0398, BR_Nuclei_0378, BR_Nuclei_0375, BR_Nuclei_0394, BR_Nuclei_0402, BR_Nuclei_0403),
+                 add.cell.ids = samples, 
+                 project = "LBD")
+    saveRDS(dataObject, paste0("../rObjects/", treatment, ".rds"))
+} 
+# Inspect 
+dataObject
+
+rm(BR_Nuclei_0368, BR_Nuclei_0381, BR_Nuclei_0376, BR_Nuclei_0373, BR_Nuclei_0384, BR_Nuclei_0389, BR_Nuclei_0400, BR_Nuclei_0392, BR_Nuclei_0377, BR_Nuclei_0382, BR_Nuclei_0369, BR_Nuclei_0390, BR_Nuclei_0385, BR_Nuclei_0374, BR_Nuclei_0401, BR_Nuclei_0393, BR_Nuclei_0380, BR_Nuclei_0372, BR_Nuclei_0391, BR_Nuclei_0388, BR_Nuclei_0396, BR_Nuclei_0407, BR_Nuclei_0397, BR_Nuclei_0406, BR_Nuclei_0379, BR_Nuclei_0371, BR_Nuclei_0383, BR_Nuclei_0387, BR_Nuclei_0395, BR_Nuclei_0399, BR_Nuclei_0405, BR_Nuclei_0404, BR_Nuclei_0386, BR_Nuclei_0370, BR_Nuclei_0398, BR_Nuclei_0378, BR_Nuclei_0375, BR_Nuclei_0394, BR_Nuclei_0402, BR_Nuclei_0403)
+```
+
+# Change indents
+```{r change_idents}
+barcodes <- colnames(dataObject)
+sample <- str_match(barcodes, "(.+)_[ACGT]+")[,2]
+table(sample)
+unique(sample)
+dataObject$sample <- factor(sample) #, levels = samples)
+table(dataObject$sample)  # check
+Idents(dataObject) <- dataObject$sample
+```
+
+Add condition column to metadata
+```{r condition_column}
+# Match the samples to the dataObject
+sample_match <- match(dataObject$sample, samples)
+
+# Sex 
+dataObject$sex <- sex_order[sample_match]
+table(dataObject$sex) 
+
+# Type
+dataObject$group <- disease_order[sample_match]
+table(dataObject$group) 
+
+dataObject$Sample_ID <- sample_order[sample_match]
+table(dataObject$Sample_ID) 
+```
+
+QC columns 
+```{r QC_columns}
+summary(dataObject$nCount_RNA)
+summary(dataObject$nFeature_RNA)
+# cell.complexity
+dataObject$cell.complexity <- log10(dataObject$nFeature_RNA) / log10(dataObject$nCount_RNA)
+
+# Chromosome M
+gene.names <- rownames(dataObject)
+dataObject$percent.mt <- PercentageFeatureSet(dataObject, features = mt.genes)
+summary(dataObject$percent.mt)
+
+# ribosomal proteins 
+ribo.genes <- gene.names[grep("^RP[SL]", gene.names)] 
+mt.ribo <- gene.names[grep("^MRP[SL]", gene.names)]
+ribo.combined <- c(mt.ribo,ribo.genes)
+dataObject$percent.ribo <- PercentageFeatureSet(dataObject, features = ribo.combined)
+summary(dataObject$percent.ribo)
+
+# hemoglobin proteins
+hb.genes <- gene.names[grep("^HB[BA]", gene.names)]
+dataObject$percent.hb <- PercentageFeatureSet(dataObject, features = hb.genes)
+summary(dataObject$percent.hb)
+
+# percent choroid plexus
+dataObject$percent.choroid <- PercentageFeatureSet(dataObject, features = c("TTR","FOLR1", "PRLR"))
+summary(dataObject$percent.choroid)
+```
+
+# Pre-filtering QC
+## Number of cells
+```{r prefiltering_cells_per_sample}
+# Visualize the number of cell counts per sample
+data <- as.data.frame(table(dataObject$Sample_ID))
+colnames(data) <- c("Sample_ID","frequency")
+
+ncells1 <- ggplot(data, aes(x = Sample_ID, y = frequency, fill = Sample_ID)) + 
+  geom_col() +
+  theme_classic() +
+  geom_text(aes(label = frequency), 
+            position=position_dodge(width=0.9), 
+            #vjust=-0.25, 
+            hjust = -.025,
+            angle = 90) +
+  #scale_fill_manual(values = sample_colors) + 
+  scale_y_continuous(breaks = seq(0,30000, by = 2000), limits = c(0,30000)) +
+  ggtitle("Raw: nuclei per sample") +
+  theme(legend.position =  "none") + 
+  theme(axis.text.x = element_text(angle = 45, hjust=1))
+ncells1
+```
+
+## Density plots
+```{r prefiltering_density}
+# set graphical parameter
+par(mfrow = c(4,1))
+# Visualize nCount_RNA
+den1 <- ggplot(dataObject@meta.data,
+       aes(color = Sample_ID,
+           x = nCount_RNA,
+           fill = Sample_ID)) +
+  geom_density(alpha = 0.2) +
+  theme_classic() +
+  scale_x_log10() +
+  #scale_color_manual(values = sample_colors) +
+  #scale_fill_manual(values = sample_colors) +
+  xlab("nCount_RNA") +
+  ylab("Density") +
+  geom_vline(xintercept = nCount.min) +
+  geom_vline(xintercept = nCount.max) + theme(legend.position="none")
+
+
+# Visualize nFeature
+den2 <- ggplot(dataObject@meta.data,
+       aes(color = Sample_ID,
+           x = nFeature_RNA,
+           fill = Sample_ID)) +
+  geom_density(alpha = 0.2) +
+  theme_classic() +
+  scale_x_log10() +
+  #scale_color_manual(values = sample_colors) +
+  #scale_fill_manual(values = sample_colors) +
+  xlab("nFeature_RNA") +
+  ylab("Density") +
+  geom_vline(xintercept = nFeature.min) +
+  geom_vline(xintercept = nFeature.max) + theme(legend.position="none")
+
+
+
+# Visualize cell complexity
+# Quality cells are usually above 0.85
+den3 <- ggplot(dataObject@meta.data,
+       aes(color = Sample_ID,
+           x = cell.complexity,
+           fill = Sample_ID)) +
+  geom_density(alpha = 0.2) +
+  theme_classic() +
+  #scale_color_manual(values = sample_colors) +
+  #scale_fill_manual(values = sample_colors) +
+  xlab("Cell Complexity (log10(nFeature/nCount))") +
+  ylab("Density") +
+  geom_vline(xintercept = complexity.cutoff) + theme(legend.position="none")
+
+# Visualize percent.mt
+den4 <- ggplot(dataObject@meta.data,
+       aes(color = Sample_ID,
+           x = percent.mt,
+           fill = Sample_ID)) +
+  geom_density(alpha = 0.2) +
+  theme_classic() +
+  scale_x_continuous(n.breaks = 4) +
+  geom_vline(xintercept = mt.cutoff) +
+  #scale_color_manual(values = sample_colors) +
+  #scale_fill_manual(values = sample_colors) +
+  xlab("% Mitochondrial Genes") +
+  ylab("Density")+ theme(legend.position="none")
+
+
+
+# Arrange graphs in grid
+plots1 <- list(den1,den2,den3,den4)
+layout1 <- rbind(c(1),c(2),c(3),c(4))
+grid1 <- grid.arrange(grobs = plots1, layout_matrix = layout1)
+```
+
+## Violin plots
+```{r prefiltering_violins}
+# nFeature, nCount, and cell.complexity violins
+v1 <- VlnPlot(dataObject,
+              features = c( "nCount_RNA","nFeature_RNA", "cell.complexity"),
+              ncol = 3,
+              group.by = 'Sample_ID',
+              ##cols = sample_colors,
+              pt.size = 0)
+v1
+
+#  percent violins
+v2 <- VlnPlot(dataObject,
+              features = c("percent.mt","percent.ribo","percent.hb", "percent.choroid"),
+              ncol = 4,
+              group.by = 'Sample_ID',
+              #cols = sample_colors,
+              pt.size = 0)
+v2
+```
+
+```{r, echo=FALSE}
+# save v1
+v1
+path <- paste0("../results/violin/",treatment,"_nFeature_nCount_complexity_raw")
+saveToPDF(paste0(path, ".pdf"), width = 20, height = 4)
+dev.off()
+
+# save v2
+v2
+path <- paste0("../results/violin/",treatment,"_percent_raw")
+saveToPDF(paste0(path, ".pdf"), width = 25, height = 4)
+dev.off()
+
+# cleanup
+remove(v1,v2)
+```
+
+## Scatter plots
+```{r prefiltering_scatter1, warning=FALSE}
+s1 <- ggplot(
+  dataObject@meta.data,
+  aes(x = nCount_RNA, y = nFeature_RNA, color = percent.mt)) + 
+  geom_point() + 
+  stat_smooth(method=lm) +
+	scale_x_log10() +   	
+  scale_y_log10() + 
+  theme_classic() +
+  geom_vline(xintercept = nCount.min) + 
+  geom_vline(xintercept = nCount.max) + 
+  geom_hline(yintercept = nFeature.min) + 
+  geom_hline(yintercept = nFeature.max) + 
+  facet_wrap(~Sample_ID, ncol = 8) +
+  scale_colour_gradient(low = "gray90", high = "black", limits =c(0,100))
+s1
+```
+
+```{r echo=FALSE}
+# save
+s1
+path <- paste0("../results/scatter/",treatment,"_nFeature_vs_nCount_percentMt_raw")
+saveToPDF(paste0(path, ".pdf"), width = 20, height = 15)
+dev.off()
+
+# cleanup
+remove(s1)
+```
+
+```{r prefiltering_scatter2}
+s2 <- FeatureScatter(dataObject,
+               feature1 = "nCount_RNA",
+               feature2 = "percent.mt",
+               group.by = 'Sample_ID',
+               #cols = sample_colors,
+               shuffle = TRUE)
+s2
+```
+
+```{r,echo=FALSE}
+# save
+s2
+path <- paste0("../results/scatter/",treatment,"_nCount_vs_percentMT_raw")
+saveToPDF(paste0(path, ".pdf"), width = 6, height = 4)
+
+# cleanup
+remove(s2)
+```
+
+# Filtering
+## Cell-level filtering
+We want to be careful filtering because removing things can easily lead to
+misinterpretation.  For example, cells with high percent.mt could actually
+just be involved in respiratory processes. \
+```{r cell_filtering}
+# filter
+dataObject.filtered <- subset(dataObject,
+                        subset = (nCount_RNA > nCount.min)&
+                          (nCount_RNA < nCount.max) & 
+                          (nFeature_RNA > nFeature.min) & 
+                          (nFeature_RNA < nFeature.max) & 
+                          (cell.complexity > complexity.cutoff) &
+                          (percent.mt <= mt.cutoff) & 
+                          (percent.hb <= hb.cutoff) &
+                          (percent.ribo <= ribo.cutoff) &
+                          (percent.choroid<= choroid.cutoff))
+
+# print nuclei removed
+print(paste0(dim(dataObject)[2] - dim(dataObject.filtered)[2]," nuclei removed"))
+
+table(dataObject$Sample_ID)
+table(dataObject.filtered$Sample_ID)
+```
+
+## Gene-level filtering
+Remove lowly expressed genes.  We will keep genes that have at least 1 count in 10 cells.
+```{r gene_filtering}
+dataObject.filtered <- JoinLayers(dataObject.filtered)
+counts <- GetAssayData(object = dataObject.filtered, layer = "counts")
+nonzero <- counts > 0 
+keep <- Matrix::rowSums(nonzero) >= 10  
+counts.filtered <- counts[keep,]  
+
+dataObject.filtered <- CreateSeuratObject(counts.filtered, 
+                                     meta.data = dataObject.filtered@meta.data)
+
+# print features removed
+print(paste0(dim(counts)[1] - dim(counts.filtered)[1], " features removed"))
+```
+
+## Mitochondrial gene filtering
+```{r}
+# remove mt.genes
+counts <- GetAssayData(object = dataObject.filtered, layer = "counts")
+keep <- !rownames(counts) %in% mt.genes # false when mt.gene
+counts.filtered <- counts[keep,]
+
+# overwrite dataObject.filtered
+dataObject.filtered <- CreateSeuratObject(counts.filtered, 
+                                    meta.data = dataObject.filtered@meta.data)
+
+# print features removed
+print(paste0(dim(counts)[1] - dim(counts.filtered)[1], " features removed"))
+```
+
+## Save filtering
+```{r,echo=FALSE}
+saveRDS(dataObject.filtered, paste0("../rObjects/",treatment,"_filtered.rds"))
+dataObject.filtered <- readRDS(paste0("../rObjects/",treatment,"_filtered.rds"))
+```
+
+
+## Number of cells
+```{r number_cells2}
+# Visualize the number of cell counts per sample
+data <- as.data.frame(table(dataObject.filtered$Sample_ID))
+colnames(data) <- c("Sample_ID","frequency")
+
+ncells2 <- ggplot(data, aes(x = Sample_ID, y = frequency, fill = Sample_ID)) + 
+  geom_col() +
+  theme_classic() +
+  geom_text(aes(label = frequency), 
+            position=position_dodge(width=0.9), 
+            #vjust=-0.25, 
+            hjust = -.025,
+            angle = 90) +
+  #scale_fill_manual(values = sample_colors) + 
+  scale_y_continuous(breaks = seq(0,30000, by = 2000), limits = c(0,30000)) +
+  ggtitle("Filtered: nuclei per sample") +
+  theme(legend.position =  "none") + 
+  theme(axis.text.x = element_text(angle = 45, hjust=1))
+ncells2
+# Arrange graphs in grid
+plots2 <- list(ncells1,ncells2)
+layout2 <- cbind(c(1),c(2))
+grid2 <- grid.arrange(grobs = plots2, layout_matrix = layout2)
+```
+
+```{r,echo=FALSE}
+# save
+grid2 <- grid.arrange(grobs = plots2, layout_matrix = layout2)
+path <- paste0("../results/nuclei_count/",treatment, 
+               "_cells_per_sample")
+saveToPDF(paste0(path, ".pdf"), width = 20, height = 6)
+
+# cleanup
+remove(ncells1,ncells2,plots2,layout2,grid2)
+```
+
+## Density plots
+```{r postfiltering_density}
+# set graphical parameter
+par(mfrow = c(4,1))
+
+# Visualize the number of counts per cell
+den5 <- ggplot(dataObject.filtered@meta.data,
+       aes(color = Sample_ID,
+           x = nCount_RNA,
+           fill = Sample_ID)) +
+  geom_density(alpha = 0.2) +
+  theme_classic() +
+  scale_x_log10() +
+  #scale_color_manual(values = sample_colors) +
+  #scale_fill_manual(values = sample_colors) +
+  xlab("nCount_RNA") +
+  ylab("Density") +
+  geom_vline(xintercept = nCount.min) +
+  geom_vline(xintercept = nCount.max) + theme(legend.position="none")
+
+
+den6 <- ggplot(dataObject.filtered@meta.data,
+       aes(color = Sample_ID,
+           x = nFeature_RNA,
+           fill = Sample_ID)) +
+  geom_density(alpha = 0.2) +
+  theme_classic() +
+  scale_x_log10() +
+  #scale_color_manual(values = sample_colors) +
+  #scale_fill_manual(values = sample_colors) +
+  xlab("nFeature_RNA") +
+  ylab("Density") +
+  geom_vline(xintercept = nFeature.min) +
+  geom_vline(xintercept = nFeature.max) + theme(legend.position="none")
+
+
+
+# Visualize cell complexity
+# Quality cells are usually above 0.80
+den7 <- ggplot(dataObject.filtered@meta.data,
+       aes(color = Sample_ID,
+           x = cell.complexity,
+           fill = Sample_ID)) +
+  geom_density(alpha = 0.2) +
+  theme_classic() +
+  scale_x_log10() +
+  #scale_color_manual(values = sample_colors) +
+  #scale_fill_manual(values = sample_colors) +
+  xlab("Cell Complexity (log10(nFeature/nCount))") +
+  ylab("Density") +
+  geom_vline(xintercept = complexity.cutoff) + theme(legend.position="none")
+
+
+# Visualize percent.mt
+den8 <- ggplot(dataObject.filtered@meta.data,
+       aes(color = Sample_ID,
+           x = percent.mt,
+           fill = Sample_ID)) +
+  geom_density(alpha = 0.2) +
+  theme_classic() +
+  scale_x_log10() +
+  #scale_color_manual(values = sample_colors) +
+  #scale_fill_manual(values = sample_colors) +
+  xlab("% Mitochondrial Genes") +
+  ylab("Density") +
+  geom_vline(xintercept = mt.cutoff) + theme(legend.position="none")
+
+
+
+# Arrange graphs in grid
+plots3 <- list(den1,den2,den3,den4,den5,den6,den7,den8)
+layout3 <- rbind(c(1,5),c(2,6),c(3,7), c(4,8))
+grid3 <- grid.arrange(grobs = plots3, layout_matrix = layout3)
+```
+
+```{r, echo=FALSE}
+# save
+grid3 <- grid.arrange(grobs = plots3, layout_matrix = layout3)
+path <- paste0("../results/density/",treatment, 
+               "_density")
+saveToPDF(paste0(path, ".pdf"), width = 11, height = 8.5)
+
+# cleanup
+remove(den1,den2,den3,den4,den5,den6,plots3,layout3,grid3)
+```
+
+## Violin plots
+```{r postfiltering_violins}
+# nFeature, nCount, and cell.complexity violins
+v3 <- VlnPlot(dataObject.filtered,
+              features = c("nFeature_RNA", "nCount_RNA","cell.complexity"),
+              ncol = 3,
+              group.by = 'Sample_ID',
+              #cols = sample_colors,
+              pt.size = 0)
+v3
+
+#  percent violins
+v4 <- VlnPlot(dataObject.filtered,
+              features = c("percent.mt","percent.ribo","percent.hb", "percent.choroid"),
+              ncol = 4,
+              group.by = 'Sample_ID',
+              #cols = sample_colors,
+              pt.size = 0)
+v4
+```
+
+```{r, echo=FALSE}
+# save
+v3
+path <- paste0("../results/violin/",treatment, 
+               "_nFeature_nCount_complexity_filtered")
+saveToPDF(paste0(path, ".pdf"), width = 12, height = 4)
+
+v4
+path <- paste0("../results/violin/",treatment, 
+               "_percent_filtered")
+saveToPDF(paste0(path, ".pdf"), width = 15, height = 4)
+
+# cleanup
+remove(v3,v4)
+```
+
+## Scatter plots
+```{r postfiltering_scatter1}
+s3 <- ggplot(
+  dataObject.filtered@meta.data,
+  aes(x = nCount_RNA, y = nFeature_RNA, color = percent.mt)) + 
+  geom_point() + 
+  stat_smooth(method=lm) +
+	scale_x_log10() +   	
+  scale_y_log10() + 
+  theme_classic() +
+  geom_vline(xintercept = nCount.min) + 
+  geom_vline(xintercept = nCount.max) + 
+  geom_hline(yintercept = nFeature.min) + 
+  geom_hline(yintercept = nFeature.max) + 
+  facet_wrap(~Sample_ID, ncol = 8) +
+  scale_colour_gradient(low = "gray90", high = "black", limits =c(0,100))
+s3
+```
+
+```{r,echo=FALSE}
+# save
+s3
+path <- paste0("../results/scatter/",treatment,
+               "_nFeature_vs_nCount_perecentMt_filtered")
+saveToPDF(paste0(path, ".pdf"), width = 20, height = 15)
+
+# cleanup
+remove(s3)
+```
+
+```{r postfiltering_scatter2}
+s4 <- FeatureScatter(dataObject.filtered,
+               feature1 = "nCount_RNA",
+               feature2 = "percent.mt",
+               group.by = 'Sample_ID',
+               #cols = sample_colors,
+               shuffle = TRUE)
+s4
+```
+
+```{r,echo=FALSE}
+# save
+s4
+path <- paste0("../results/scatter/",treatment,
+               "_nCount_vs_percentMT_filtered")
+saveToPDF(paste0(path, ".pdf"), width = 6, height = 4)
+
+# cleanup
+remove(s4)
+```
+
+## Box plot
+```{r boxplot}
+# Visualize the distribution of genes detected per cell via boxplot
+b1 <- ggplot(dataObject.filtered@meta.data,
+       aes(x = Sample_ID, 
+           y = log10(nFeature_RNA), 
+           fill=Sample_ID)) + 
+  geom_boxplot() + 
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1),
+        legend.position = "none") +
+  theme(plot.title = element_text(hjust = 0.5, face="bold")) +
+  ggtitle("Unique Genes / Nuclei / Sample") +
+  #scale_color_manual(values = sample_colors) +
+  #scale_fill_manual(values = sample_colors) +
+  xlab("Sample")
+b1
+```
+
+```{r,echo=FALSE}
+# save
+b1
+path <- paste0("../results/nuclei_count/",treatment,
+               "_nFeature_per_sample")
+saveToPDF(paste0(path, ".pdf"), width = 12, height = 4)
+
+# cleanup
+remove(b1)
+```
+
+# Top transcripts
+```{r top_transcripts}
+df <- data.frame(row.names = rownames(dataObject.filtered))
+df$rsum <- rowSums(x = dataObject.filtered, slot = "counts")
+df$gene_name <- rownames(df)
+df <- df[order(df$rsum,decreasing = TRUE),]
+head(df, 10)
+```
+
+```{r,echo=FALSE}
+write.table(df, paste0("../results/top_transcripts/", treatment, "_abundant_transcripts.txt"),
+            quote = FALSE,
+            row.names = FALSE)
+```
+
+
+# SCTransform
+Now, we can use the SCTransform method as a more accurate method of normalizing, 
+estimating the variance of the raw filtered data, and identifying the most 
+variable genes. Variation in sequencing depth (total nCount_RNA per cell) is 
+normalized using a regularized negative binomial model.Variance is also 
+adjusted based on pooling information across genes with similar abundances. 
+
+Sctransform automatically accounts for cellular sequencing depth by regressing 
+out sequencing depth (nUMIs). However, if there are other sources of 
+uninteresting variation identified in the data during the exploration steps we 
+can also include these. 
+
+Since we have ## samples in our dataset (from ## conditions), we want to keep 
+them as separate objects and transform them as that is what is required for 
+integration. We will first split the cells in seurat.phase object by sample. 
+
+```{r split_object2}
+dataObject.filtered[["RNA"]] <- split(dataObject.filtered[["RNA"]], 
+                                 f = dataObject.filtered$Sample_ID)
+```
+
+Now we will use a ‘for loop’ to run the SCTransform() on each sample, and 
+regress out mitochondrial expression by specifying in the vars.to.regress 
+argument of the SCTransform() function.
+
+Before we run this for loop, we know that the output can generate large R 
+objects/variables in terms of memory. If we have a large dataset, then we might 
+need to adjust the limit for allowable object sizes within R (Default is 500 * 
+1024 ^ 2 = 500 Mb) using the following code:
+
+```{r sct}
+# transform
+dataObject.filtered <- SCTransform(dataObject.filtered, verbose = FALSE)
+```
+
+NOTE: By default, after normalizing, adjusting the variance, and regressing out 
+uninteresting sources of variation, SCTransform will rank the genes by residual 
+variance and output the 3000 most variant genes. If the dataset has larger cell 
+numbers, then it may be beneficial to adjust this parameter higher using the 
+variable.features.n argument.
+
+Note, the last line of output specifies “Set default assay to SCT”. We can view 
+the different assays that we have stored in our seurat object.
+
+A thread about whether or not regress out batch:
+https://github.com/satijalab/issues/3270
+It is suggested to not regress out batch, and instead use a data integration method 
+
+## PCA
+```{r pca}
+# run PCA on the merged object
+dataObject.filtered <- RunPCA(object = dataObject.filtered, assay = "SCT")
+```
+
+```{r plot_pca}
+Idents(dataObject.filtered) <- "Sample_ID"
+
+# Plot PCA
+pca1 <- DimPlot(dataObject.filtered,
+                reduction = "pca",
+                split.by = "Sample_ID",
+                group.by = "Sample_ID",
+                ncol = 4)
+pca1
+
+DimPlot(dataObject.filtered,
+                reduction = "pca")
+```
+
+```{r echo=FALSE}
+# save
+pca1
+path <- paste0("../results/pca/",treatment,
+               "_pca_by_sample")
+saveToPDF(paste0(path, ".pdf"), width = 8.5, height = 11)
+
+
+DimHeatmap(dataObject.filtered, dims = 1:15, cells = 500, balanced = TRUE)
+path <- paste0("../results/pca/",treatment,
+               "_pca_genes_dim1to15")
+saveToPDF(paste0(path, ".pdf"), width = 8, height = 11)
+
+# cleanup
+remove(pca1, PCplot)
+```
+
+## Top variable features
+Top 20 variable features
+```{r variable_genes}
+top20 <- dataObject.filtered@assays$SCT@var.features[1:20]
+top20
+```
+
+
+# Find significant PCs
+To overcome the extensive technical noise in the expression of any single gene 
+for scRNA-seq data, Seurat assigns cells to clusters based on their PCA scores 
+derived from the expression of the integrated most variable genes, with each PC 
+essentially representing a “metagene” that combines information across a 
+correlated gene set. Determining how many PCs to include in the clustering step 
+is therefore important to ensure that we are capturing the majority of the 
+variation, or cell types, present in our dataset.
+
+```{r view_PCs}
+# Printing out the most variable genes driving PCs
+print(x = dataObject.filtered[["pca"]], 
+      dims = 1:10, 
+      nfeatures = 10)
+```
+
+Quantitative approach to an elbow plot
+- The point where the principal components only contribute 5% of standard 
+  deviation and the principal components cumulatively contribute 90% of the 
+  standard deviation.
+- The point where the percent change in variation between the consecutive PCs is 
+  less than 0.1%.
+
+First metric
+```{r metric1}
+# Determine percent of variation associated with each PC
+stdv <- dataObject.filtered[["pca"]]@stdev
+sum.stdv <- sum(dataObject.filtered[["pca"]]@stdev)
+percent.stdv <- (stdv / sum.stdv) * 100
+
+# Calculate cumulative percents for each PC
+cumulative <- cumsum(percent.stdv)
+
+# Determine which PC exhibits cumulative percent greater than 90% and
+# and % variation associated with the PC as less than 5
+co1 <- which(cumulative > 90 & percent.stdv < 5)[1]
+co1
+```
+
+Second metric
+```{r metric2}
+# Determine the difference between variation of PC and subsequent PC
+co2 <- sort(which(
+  (percent.stdv[1:length(percent.stdv) - 1] - 
+     percent.stdv[2:length(percent.stdv)]) > 0.1), 
+  decreasing = T)[1] + 1
+
+# last point where change of % of variation is more than 0.1%.
+co2
+```
+
+Choose the minimum of these two metrics as the PCs covering 
+the majority of the variation in the data.
+```{r minimum_PCs}
+# Minimum of the two calculation
+min.pc <- min(co1, co2)
+min.pc
+```
+
+## Elbow plot
+Use min.pc we just calculated to generate the clusters. We can plot the elbow 
+plot again and overlay the information determined using our metrics:
+```{r quantitative_elbow}
+# Create a dataframe with values
+plot_df <- data.frame(pct = percent.stdv, 
+           cumu = cumulative, 
+           rank = 1:length(percent.stdv))
+
+# Elbow plot to visualize 
+  ggplot(plot_df, aes(cumulative, percent.stdv, label = rank, color = rank > min.pc)) + 
+  geom_text() + 
+  geom_vline(xintercept = 90, color = "grey") + 
+  geom_hline(yintercept = min(percent.stdv[percent.stdv > 5]), color = "grey") +
+  theme_bw()
+```
+
+
+# UMAP
+```{r UMAP, message=FALSE, warning=FALSE}
+# re-join layers
+dataObject.filtered[["RNA"]] <- JoinLayers(dataObject.filtered[["RNA"]])
+
+# Determine the K-nearest neighbor graph
+dataObject.filtered <- FindNeighbors(object = dataObject.filtered, 
+                                 assay = "SCT", # set as default after SCTransform
+                                 reduction = "pca", # pca, harmony 
+                                 dims = 1:min.pc)
+# Run UMAP
+dataObject.filtered <- RunUMAP(dataObject.filtered,
+                           dims = 1:min.pc,
+                           reduction = "pca",
+                           n.components = 3) # set to 3 to use with VR
+```
+
+```{r plot_UMAP}
+# plot UMAP and color based on treatment
+DimPlot(dataObject.filtered,
+        group.by = "Sample_ID",
+        split.by = "Sample_ID",
+        shuffle = TRUE)
+
+DimPlot(dataObject.filtered,
+        group.by = "Sample_ID",
+        shuffle = TRUE)
+```
+
+# Cluster the cells
+Seurat uses a graph-based clustering approach, which embeds cells in a graph 
+structure, using a K-nearest neighbor (KNN) graph (by default), with edges drawn 
+between cells with similar gene expression patterns. Then, it attempts to 
+partition this graph into highly interconnected ‘quasi-cliques’ or ‘communities’ 
+[Seurat - Guided Clustering Tutorial].
+
+We will use the FindClusters() function to perform the graph-based clustering. 
+The resolution is an important argument that sets the “granularity” of the 
+downstream clustering and will need to be optimized for every individual experiment. 
+For datasets of 3,000 - 5,000 cells, the resolution set between 0.4-1.4 generally 
+yields good clustering. Increased resolution values lead to a greater number of 
+clusters, which is often required for larger datasets.
+
+The FindClusters() function allows us to enter a series of resolutions and will 
+calculate the “granularity” of the clustering. This is very helpful for testing 
+which resolution works for moving forward without having to run the function for 
+each resolution.
+
+```{r find_neighbors, message=FALSE, warning=FALSE}
+# Determine the clusters for various resolutions
+dataObject.filtered <- FindClusters(object = dataObject.filtered,
+                                 algorithm = 1, # 1= Louvain
+                                 resolution = seq(0.4,1.2,by=0.2))
+# parameter between 0.4-1.2 typically returns good results for single-cell datasets of around 3K cells. Optimal resolution often increases for larger datasets. 
+```
+
+```{r}
+DimPlot(dataObject.filtered,
+        group.by = "seurat_clusters",
+        label = TRUE)
+```
+
+# Explore resolutions
+```{r}
+# 0.4
+umap0.4 <- DimPlot(dataObject.filtered,
+        group.by = "SCT_snn_res.0.4",
+        label = TRUE)
+umap0.4
+
+```
+
+
+# Clustering QC
+## Treatment, sample, phase
+```{r umap_treatment}
+
+# sample
+u2 <- DimPlot(dataObject.filtered, 
+        label = FALSE,
+        group.by = "SCT_snn_res.0.6",
+        split.by = "group") +
+  NoLegend()
+u2
+
+```
+
+
+## Revisit QC metrics
+```{r umap_QC}
+# nCount
+f1 <- FeaturePlot(dataObject.filtered, 
+            features = "nCount_RNA",
+            pt.size = 0.4, 
+            order = TRUE,
+            min.cutoff = 'q10',
+            label = TRUE)
+f1
+
+# nFeature
+f2 <- FeaturePlot(dataObject.filtered, 
+            features = "nFeature_RNA",
+            pt.size = 0.4, 
+            order = TRUE,
+            min.cutoff = 'q10',
+            label = TRUE)
+f2
+
+# percent.mt
+f3 <- FeaturePlot(dataObject.filtered, 
+            features = "percent.mt",
+            pt.size = 0.4, 
+            order = TRUE,
+            min.cutoff = 'q10',
+            label = TRUE)
+f3
+
+# cell.complexity
+f4 <- FeaturePlot(dataObject.filtered, 
+            features = "cell.complexity",
+            pt.size = 0.4, 
+            order = TRUE,
+            min.cutoff = 'q10',
+            label = TRUE)
+f4
+
+```
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+# save
+path <- paste0("../results/feature/",treatment,
+               "_UMAP_unannotated_nCount")
+f1
+saveToPDF(paste0(path, ".pdf"), width = 5.5, height = 4)
+
+# save
+path <- paste0("../results/feature/",treatment,
+               "_UMAP_unannotated_nFeature")
+f2
+saveToPDF(paste0(path, ".pdf"), width = 5.5, height = 4)
+
+
+# save
+path <- paste0("../results/feature/",treatment,
+               "_UMAP_unannotated_percentMT")
+f3
+saveToPDF(paste0(path, ".pdf"), width = 5.5, height = 4)
+
+
+# save
+path <- paste0("../results/feature/",treatment,
+               "_UMAP_unannotated_complexity")
+f4
+saveToPDF(paste0(path, ".pdf"), width = 5.5, height = 4)
+
+
+#remove(f1,f2,f3,f4)
+```
+
+
+## Percent cells per cluster
+```{r percent_cells_per_cluster}
+dataObject.filtered$seurat_clusters <- dataObject.filtered$SCT_snn_res.0.4
+
+# sample
+b2 <- dataObject.filtered@meta.data %>%
+  group_by(seurat_clusters, Sample_ID) %>%
+  dplyr::count() %>%
+  group_by(seurat_clusters) %>%
+  dplyr::mutate(percent = 100*n/sum(n)) %>%
+  ungroup() %>%
+  ggplot(aes(x=seurat_clusters,y=percent, fill=Sample_ID)) +
+  geom_col() +
+  #scale_fill_manual(values = sample_colors) +
+  ggtitle("Percentage of sample per cluster")
+b2
+```
+
+```{r,echo=FALSE}
+# save
+path <- paste0("../results/nuclei_count/",treatment,
+               "_percent_nuclei_per_cluster_sample")
+b2
+saveToPDF(paste0(path, ".pdf"), width = 20, height = 6)
+
+```
+
+
+## Number cells per cluster
+```{r cells_per_cluster}
+treatment_ncells <- FetchData(dataObject.filtered, 
+                     vars = c("ident", "group")) %>%
+  dplyr::count(ident, group) %>%
+  tidyr::spread(ident, n)
+write.table(treatment_ncells, 
+            paste0("../results/nuclei_count/",
+                   treatment, 
+                   "_cells_per_cluster_treatment.txt"),
+            quote = FALSE, sep = "\t")
+
+sample_ncells <- FetchData(dataObject.filtered, 
+                     vars = c("ident", "Sample_ID")) %>%
+  dplyr::count(ident,Sample_ID) %>%
+  tidyr::spread(ident, n)
+write.table(sample_ncells, 
+            paste0("../results/nuclei_count/",
+                   treatment, 
+                   "_cells_per_cluster_sample.txt"),
+            quote = FALSE, sep = "\t")
+
+sample_ncells
+```
+
+# Save
+```{r save_object_integrated,echo=FALSE,eval=TRUE}
+# Save integrated seurat object
+saveRDS(dataObject.filtered, paste0("../rObjects/",treatment,"_unannotated_no_integration.rds"))
+dataObject.filtered <- readRDS(file = paste0("../rObjects/",treatment,"_unannotated_no_integration.rds"))
+```
+
+# Azimuth
+```{r Azimuth, eval=FALSE}
+dataObject.filtered <- RunAzimuth(dataObject.filtered, reference = "mousecortexref")
+# currently, the object has two layers in the RNA assay: counts, and data
+dataObject.filtered$predicted.subclass
+
+DimPlot(dataObject.filtered, group.by = "predicted.subclass", label = TRUE, label.size = 3) + NoLegend()
+```
+
+## Integration 
+Seurat v5 enables streamlined integrative analysis using the IntegrateLayers function. The method currently supports five integration methods. Each of these methods performs integration in low-dimensional space, and returns a dimensional reduction (i.e. integrated.rpca) that aims to co-embed shared cell types across batches:
+
+Anchor-based CCA integration (method=CCAIntegration)
+Anchor-based RPCA integration (method=RPCAIntegration)
+Harmony (method=HarmonyIntegration)
+FastMNN (method= FastMNNIntegration)
+scVI (method=scVIIntegration)
+Note that our anchor-based RPCA integration represents a faster and more conservative (less correction) method for integration. For interested users, we discuss this method in more detail in our previous RPCA vignette
+```{r integrate}
+set.seed(45)
+dataObject.integrated <- IntegrateLayers(
+  object = dataObject.filtered, method = HarmonyIntegration,
+  normalization.method = "SCT",
+  orig.reduction = "pca", new.reduction = "harmony",
+  verbose = FALSE
+)
+help(IntegrateLayers)
+# Determine the K-nearest neighbor graph
+dataObject.integrated <- FindNeighbors(object = dataObject.integrated, 
+                                 reduction = "harmony", # pca, harmony 
+                                 dims = 1:30)
+
+# Determine the clusters for various resolutions
+dataObject.integrated <- FindClusters(object = dataObject.integrated, resolution = 0.2)
+dataObject.integrated <- RunUMAP(dataObject.integrated, reduction = "harmony", dims = 1:30)
+
+p1 <- DimPlot(
+  dataObject.integrated,
+  reduction = "harmony",
+  group.by = c("Sample_ID"),
+  combine = FALSE, label.size = 2
+)
+p1
+
+#dataObject.integrated$seurat_clusters
+#dataObject.integrated <- JoinLayers(dataObject.integrated)
+```
+
+## Explore resolutions
+```{r}
+umap_seurat_clusters <- DimPlot(dataObject.integrated,
+        group.by = "seurat_clusters",
+        label = TRUE)
+umap_seurat_clusters
+```
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+path <- paste0("../results/UMAP/unannotated/",treatment,
+               "_integrated_UMAP_unannotated")
+umap_seurat_clusters
+saveToPDF(paste0(path, ".pdf"), width = 6, height = 4)
+```
+
+## Clustering QC
+## sample, type
+```{r umap_treatment}
+# sample
+u1 <- DimPlot(dataObject.integrated, 
+        label = FALSE,
+        reduction = "umap",
+        split.by = "group") +
+  NoLegend()
+u1
+
+# save 
+path <- paste0("../results/UMAP/unannotated/",treatment,
+               "_group_integrated_UMAP")
+u1
+saveToPDF(paste0(path, ".pdf"), width = 12, height = 8)
+```
+
+
+## Revisit QC metrics
+```{r umap_QC}
+# nCount
+f1 <- FeaturePlot(dataObject.integrated, 
+            features = "nCount_RNA",
+            pt.size = 0.4, 
+            order = TRUE,
+            min.cutoff = 'q10',
+            label = TRUE)
+f1
+
+# nFeature
+f2 <- FeaturePlot(dataObject.integrated, 
+            features = "nFeature_RNA",
+            pt.size = 0.4, 
+            order = TRUE,
+            min.cutoff = 'q10',
+            label = TRUE)
+f2
+
+# percent.mt
+f3 <- FeaturePlot(dataObject.integrated, 
+            features = "percent.mt",
+            pt.size = 0.4, 
+            order = TRUE,
+            min.cutoff = 'q10',
+            label = TRUE)
+f3
+
+# cell.complexity
+f4 <- FeaturePlot(dataObject.integrated, 
+            features = "cell.complexity",
+            pt.size = 0.4, 
+            order = TRUE,
+            min.cutoff = 'q10',
+            label = TRUE)
+f4
+
+```
+
+## Percent sample per cluster
+```{r percent_sample_per_cluster}
+# sample before integration 
+bFiltered <- dataObject.filtered@meta.data %>%
+  group_by(seurat_clusters, Sample_ID) %>%
+  dplyr::count() %>%
+  group_by(seurat_clusters) %>%
+  dplyr::mutate(percent = 100*n/sum(n)) %>%
+  ungroup() %>%
+  ggplot(aes(x=seurat_clusters,y=percent, fill=Sample_ID)) +
+  geom_col() +
+#  scale_fill_manual(values = sample_colors) +
+  ggtitle("Percentage of sample per cluster")
+bFiltered
+
+# sample after integration 
+bInt <- dataObject.integrated@meta.data %>%
+  group_by(seurat_clusters, Sample_ID) %>%
+  dplyr::count() %>%
+  group_by(seurat_clusters) %>%
+  dplyr::mutate(percent = 100*n/sum(n)) %>%
+  ungroup() %>%
+  ggplot(aes(x=seurat_clusters,y=percent, fill=Sample_ID)) +
+  geom_col() +
+#  scale_fill_manual(values = sample_colors) +
+  ggtitle("Percentage of sample per cluster") + guides(colour=guide_legend(nrow=10))
+bInt
+```
+
+```{r,echo=FALSE}
+# save
+path <- paste0("../results/nuclei_count/",treatment,
+               "_unintegrated_percent_nuclei_per_cluster_sample")
+bFiltered
+saveToPDF(paste0(path, ".pdf"), width = 15, height = 6)
+
+path <- paste0("../results/nuclei_count/",treatment,
+               "_integrated_percent_nuclei_per_cluster_sample")
+bInt
+saveToPDF(paste0(path, ".pdf"), width = 15, height = 6)
+
+```
+
+## Percent type per cluster
+```{r percent_type_per_cluster}
+# Sex before integration 
+bFilteredSex <- dataObject.filtered@meta.data %>%
+  group_by(seurat_clusters, sex) %>%
+  dplyr::count() %>%
+  group_by(seurat_clusters) %>%
+  dplyr::mutate(percent = 100*n/sum(n)) %>%
+  ungroup() %>%
+  ggplot(aes(x=seurat_clusters,y=percent, fill=sex)) +
+  geom_col() +
+#  scale_fill_manual(values = sample_colors) +
+  ggtitle("Percentage of sex per cluster")
+bFilteredSex
+
+# sex after integration
+bIntSex <- dataObject.integrated@meta.data %>%
+  group_by(seurat_clusters, sex) %>%
+  dplyr::count() %>%
+  group_by(seurat_clusters) %>%
+  dplyr::mutate(percent = 100*n/sum(n)) %>%
+  ungroup() %>%
+  ggplot(aes(x=seurat_clusters,y=percent, fill=sex)) +
+  geom_col() +
+#  scale_fill_manual(values = sample_colors) +
+  ggtitle("Percentage of sex per cluster") + guides(colour=guide_legend(nrow=10))
+bIntSex
+
+# Type before integration
+bFilteredgroup <- dataObject.filtered@meta.data %>%
+  group_by(seurat_clusters, group) %>%
+  dplyr::count() %>%
+  group_by(seurat_clusters) %>%
+  dplyr::mutate(percent = 100*n/sum(n)) %>%
+  ungroup() %>%
+  ggplot(aes(x=seurat_clusters,y=percent, fill=group)) +
+  geom_col() +
+#  scale_fill_manual(values = sample_colors) +
+  ggtitle("Percentage of group per cluster")
+bFilteredStrain
+
+# group after integration 
+bIntgroup<- dataObject.integrated@meta.data %>%
+  group_by(seurat_clusters, group) %>%
+  dplyr::count() %>%
+  group_by(seurat_clusters) %>%
+  dplyr::mutate(percent = 100*n/sum(n)) %>%
+  ungroup() %>%
+  ggplot(aes(x=seurat_clusters,y=percent, fill=group)) +
+  geom_col() +
+#  scale_fill_manual(values = sample_colors) +
+  ggtitle("Percentage of group per cluster") + guides(colour=guide_legend(nrow=10))
+bIntgroup
+```
+
+## Number cells per cluster
+```{r cells_per_cluster}
+treatment_ncells <- FetchData(dataObject.integrated, 
+                     vars = c("ident", "group")) %>%
+  dplyr::count(ident, group) %>%
+  tidyr::spread(ident, n)
+write.table(treatment_ncells, 
+            paste0("../results/nuclei_count/",
+                   treatment, 
+                   "_integrated_cells_per_cluster_group.txt"),
+            quote = FALSE, sep = "\t")
+
+dataObject.integrated$Sample_ID
+sample_ncells <- FetchData(dataObject.integrated, 
+                     vars = c("ident", "Sample_ID")) %>%
+  dplyr::count(ident,Sample_ID) %>%
+  tidyr::spread(ident, n)
+write.table(sample_ncells, 
+            paste0("../results/nuclei_count/",
+                   treatment, 
+                   "_integrated_cells_per_cluster_sample.txt"),
+            quote = FALSE, sep = "\t")
+
+sample_ncells
+```
+
+
+```{r}
+markers.to.plot <-
+  c(
+"CLU", 
+"GFAP", 
+"AQP4", 
+"RBFOX3", 
+"RBFOX1",
+"MBP", 
+"MOG", 
+"TMEM119", 
+"P2RY12"
+  )
+
+dot_ind <- DotPlot(dataObject.integrated,
+                   features = markers.to.plot, 
+                   cluster.idents = TRUE,
+                   dot.scale = 8) + RotatedAxis()
+dot_ind
+```
+
+```{r save_dot_individual, echo=FALSE}
+pdf(
+  paste0(
+    "../results/dot_plot/",
+    treatment,
+    "_clusters_DotPlot_integration.pdf"
+  ),
+  width = 14,
+  height = 9
+)
+dot_ind
+dev.off()
+```
+
+# Save
+```{r save_object_integrated,echo=FALSE,eval=TRUE}
+# Save integrated seurat object
+#dataObject.integrated$seurat_clusters <- dataObject.integrated$SCT_snn_res.0.8
+saveRDS(dataObject.integrated, paste0("../rObjects/",treatment,"_unannotated_integrated.rds"))
+```
+
