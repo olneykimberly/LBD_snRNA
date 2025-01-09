@@ -17,7 +17,9 @@ rule all:
       #  expand("{sample}/outs", sample=config["sample_names"]),
       #  expand(config["cellranger_dir"]+"{sample}/", sample=config["sample_names"]),
       #  expand(config["cellranger_dir"]+"web_summaries/{sample}_web_summary.html", sample=config["sample_names"]),
-         expand(config["cellbender_dir"]+"{sample}/{sample}_cellbender.h5", sample=config["sample_names"])
+      #   expand(config["cellbender_dir"]+"{sample}/{sample}_filtered.h5", sample=config["sample_names"]),
+         expand(config["cellbender_dir"]+"{sample}/{sample}_filtered_seurat.h5", sample=config["sample_names"])
+
 #------------------------------
 # alignment
 #------------------------------
@@ -36,14 +38,15 @@ rule cellranger:
         {params.cellranger} count --id={params.id} --sample={params.sm} --fastqs={params.path} --transcriptome={params.ref} --create-bam true --localcores=16 --localmem=50 || true
         """
 
-
 # $sample is the sampleID (e.g. 11-87_BR)
 # --fastqs is path to the snRNAseq fastq files
 # --transcriptome is the path to the human genome directory. This was created in a prior step.
 # --localcores will restrict cellranger to 16 cores
 # --localmem will restrict cellranger to 50G memory
 
-
+#------------------------------
+# move websummaries to a folder 
+#------------------------------
 #rule move:
  #   output:
   #      outs_dir = directory(config["cellranger_dir"]+"{sample}/"),
@@ -65,14 +68,14 @@ rule cellbender:
         input:
             h5 = (config["cellranger_dir"]+"{sample}/outs/raw_feature_bc_matrix.h5")
         output:
-            benderh5 = (config["cellbender_dir"]+"{sample}/{sample}_cellbender.h5"),
+            benderh5 = (config["cellbender_dir"]+"{sample}/{sample}_filtered.h5"),
             dir = (directory("{sample}/")),
         params:
             id = lambda wildcards: config[wildcards.sample]["ID"],
         shell:
             """
-	    cd /tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/cellbender;
-	    cd {output.dir};
+	          cd /tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/cellbender;
+	          cd {output.dir};
             cellbender remove-background --input ../{input.h5} --output {params.id} --checkpoint ckpt.tar.gz
             """
 
@@ -84,3 +87,24 @@ rule cellbender:
 # --fpr: A value of 0.01 is generally quite good, but you can generate a few output count matrices and compare them by choosing a few values: 0.01 0.05 0.1
 # --epochs: 150 is typically a good choice. Look for a reasonably-converged ELBO value in the output PDF learning curve (meaning it looks like it has reached some saturating value). Though it may be tempting to train for more epochs, it is not advisable to over-train, since thisincreases the likelihood of over-fitting. (We regularize to prevent over-fitting, but training for more than 300 epochs is too much.)
 # NOTE: total_droplets must be an integer greater than the input expected_cell_count, which is 10000.
+
+#------------------------------
+# Convert cellbender h5 to seurat h5 format
+#------------------------------
+rule seurath5:
+        input:
+            benderh5 = (config["cellbender_dir"]+"{sample}/{sample}_filtered.h5")
+        output:
+            seurath5 = (config["cellbender_dir"]+"{sample}/{sample}_filtered_seurat.h5")
+        shell:
+            """
+            ptrepack --complevel 5 {input.benderh5}:/matrix {output.seurath5}:/matrix
+            """
+
+# Seurat v4 and v5 use a dataloader Read10X_h5(), which is incompatible with the CellBender output file format. 
+# In the interim, we can use PyTables to strip the extra CellBender information out of the output file so that Seurat can load it.
+
+# ptrepack 
+# --complevel 5  ensures that the file size does not increase
+# {input.benderh5}:/matrix input
+# {output.seurath5}:/matrix output, rename to seurat so we know that it's seurat formatted

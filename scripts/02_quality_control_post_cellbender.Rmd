@@ -1,7 +1,7 @@
 ---
-title: "10X QC processing"
+title: "10X QC processing pst cellbender"
 author: "Kimberly Olney, PhD"
-date: "12/23/2024"
+date: "01/09/2025"
 output:
   html_document:
     theme: cerulean
@@ -24,7 +24,7 @@ library(glmGamPoi)
 # Libraris, paths, colors
 ```{r echo=FALSE, message=FALSE}
 source(here::here("/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/scripts/", "file_paths_and_colours.R"))
-treatment <- "LBD"
+treatment <- "cellbender"
 
 # Remove sample
 # metadata <- subset(metadata, sampleID != "P_60"  & sampleID != "B_6")
@@ -82,15 +82,35 @@ choroid.cutoff <- 0
 
 # Setup seurat object
 ```{r seurat_object}
-prefix <- "../cellranger/"
-suffix <- "outs/filtered_feature_bc_matrix.h5"
+prefix <- "../cellbender/"
+suffix <- "_filtered.h5"
+
+i<- "BR_Nuclei_0368"
+obj <- CreateSeuratObject(Read10X_h5("../cellbender/BR_Nuclei_0404/BR_Nuclei_0404_filtered_seurat.h5"))
+
+# load Seurat (version 3) library
+library(Seurat)
+
+# load data from the filtered h5 file
+data.file <- '/tgen_labs/jfryer/kolney/PMI/cellbender/B_10/B_10_cellbender_filtered_seurat.h5'
+data.data <- Read10X_h5(filename = data.file, use.names = TRUE)
+
+library(rhdf5)
+h5ls(data.file)
+data <- h5read(data.file, "/data")
+
+
+
+
+# create Seurat object
+obj <- CreateSeuratObject(counts = data.data)
 
 if (file.exists(paste0("../rObjects/", treatment, ".rds"))) {
   dataObject <- readRDS(paste0("../rObjects/", treatment, ".rds"))
 } else {
   for (i in samples) {
     print(i)
-    obj <- CreateSeuratObject(Read10X_h5(paste0(prefix,i,"/",suffix)))
+    obj <- CreateSeuratObject(Read10X_h5(paste0(prefix,i,"/",i,suffix)))
     assign(i, obj)
   }
   # merge objects

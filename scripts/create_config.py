@@ -3,24 +3,32 @@
 # create a new output file
 outfile = open('config.json', 'w')
 
-# get all, kidney, brain and blood sample names
+# get all sample names
 allSamples = list()
-type_LBD = list()
-LDB_type = list()
-sex = list()
-read = ["R1", "R2"]
 numSamples = 0
 
 with open('sampleReadGroupInfo_snRNA.txt', 'r') as infile:
     for line in infile:
         numSamples += 1
 
-        line = line.replace(".", "_")
-        line = line.replace("/", "_")
+        #line = line.replace(".", "_")
+        #line = line.replace("/", "_")
         split = line.split()
-        sampleAttributes = split[0].split('_') # 01.RawData/P_65/P_65_CKDL240007500-1A_H5MHCDSXC_S1_L001_R1_001.fastq.gz
+        sampleAttributes = split[0].split('_') # MAYO_0407_1_BR_Nuclei_C1_X3SC3_A16845_22KJLTLT4_AGCAAGAAGC_L007_R1_001.fastq.gz
+        # [0] study
+        # [1] patient
+        # [2] visit (1 for frozen banked samples)
+        # [3] source (2 letter code; BR = brain)
+        # [4] fraction (Nuclie or whole)
+        # [5] subgroup - C1 is control as they don't know the disease status
+        # [6] assay 
+        # [7] library (1 letter and 5 numbers)
+        # [8] sequence order - was [8:9] barcode 
+        # [9] lane
+        # [10] strand or index
+      
         # create a shorter sample name
-        stemName = sampleAttributes[2] + "_" + sampleAttributes[3]
+        stemName = sampleAttributes[3] + "_" + sampleAttributes[4] + "_" + sampleAttributes[1]
         allSamples.append(stemName)
 
 # create header and write to outfile
@@ -28,23 +36,17 @@ header = '''{{
     "Commment_Input_Output_Directories": "This section specifies the input and output directories for scripts",
     "cellranger_dir" : "../cellranger/", 
     "cellbender_dir" : "../cellbender/",
-    "cellrangerMAPT_dir" : "../cellrangerMAPT/",
-    "fastq_path" : "/research/labs/neurology/fryer/projects/PMI/2024_snRNA/",
+    "fastq_path" : "/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/fastq/",
 
-    "Comment_Reference" : "This section specifies the location of the mouse reference genome",
-    "Mmusculus_dir" : "/research/labs/neurology/fryer/projects/references/mouse/refdata-gex-GRCm39-2024-A/",
-    "Mmusculus_gtf" : "/research/labs/neurology/fryer/projects/references/mouse/refdata-gex-GRCm39-2024-A/genes/genes.gtf",
-    "Mmusculus_fa" : "/research/labs/neurology/fryer/projects/references/mouse/refdata-gex-GRCm39-2024-A/fasta/genome.fa",
+    "Comment_Reference" : "This section specifies the location of the reference genome",
+    "human_dir" : "/tgen_labs/jfryer/projects/references/human/GRCh38/refdata-gex-GRCh38-2024-A/",
+    "human_gtf" : "/tgen_labs/jfryer/projects/references/human/GRCh38/refdata-gex-GRCh38-2024-A/genes/genes.gtf",
+    "human_fa" : "/tgen_labs/jfryer/projects/references/human/GRCh38/refdata-gex-GRCh38-2024-A/fasta/genome.fa",
     
-    "Comment_MAPT_Reference" : "This section specifies the location of the mouse with human MAPT reference ",
-    "MmusculusMAPT_gtf" : "/research/labs/neurology/fryer/projects/references/mouse/human_MAPT_transgenic_mouse_reference/refdata-gex-GRCm39-2024-A_with_human_MAPT/genes/genes.gtf",
-    "MmusculusMAPT_fa" : "/research/labs/neurology/fryer/projects/references/mouse/human_MAPT_transgenic_mouse_reference/refdata-gex-GRCm39-2024-A_with_human_MAPT/fasta/genome.fa",
-    "MmusculusMAPT_dir" : "/research/labs/neurology/fryer/projects/references/mouse/human_MAPT_transgenic_mouse_reference/refdata-gex-GRCm39-2024-A_with_human_MAPT/cellranger_mouse_ref_with_human_MAPT/",
-
     "Comment_Sample_Info": "The following section lists the samples that are to be analyzed",
     "sample_names": {0},
 '''
-outfile.write(header.format(allSamples, read))
+outfile.write(header.format(allSamples))
 
 # config formatting
 counter = 0
@@ -60,22 +62,20 @@ with open('sampleReadGroupInfo_snRNA.txt', 'r') as infile:
         base = base.replace("_R1_", "")
         sampleInfo = split[1]
 
-        # make naming consistent, we will rename using only underscores (no hyphens)
-        line = line.replace(".", "_")
-        line = line.replace("/", "_")
         split = line.split()
         sampleAttributes = split[0].split('_')
         # uniqueNum-number_sequencer_lane_read.fastq.gz
 
         # create a shorter sample name
-        stemName = sampleAttributes[2] + "_" + sampleAttributes[3]
-        stemID = sampleAttributes[2] + '_' + sampleAttributes[3]
-        fullName = sampleAttributes[2] + '_' + sampleAttributes[5] + '_' + sampleAttributes[6] + '_' + sampleAttributes[7] 
+        stemName = sampleAttributes[3] + "_" + sampleAttributes[4] + "_" + sampleAttributes[1]
+        seq_order = sampleAttributes[0] + "_" + sampleAttributes[1] + "_" + sampleAttributes[2] + "_" + sampleAttributes[3] + "_" + sampleAttributes[4] + "_" + sampleAttributes[5] + "_" + sampleAttributes[6] + "_" + sampleAttributes[7] + "_" + sampleAttributes[8]
+        stemID = sampleAttributes[3] + "_" + sampleAttributes[4] + "_" + sampleAttributes[1]
+        fullName = sampleAttributes[0] + "_" + sampleAttributes[1] + "_" + sampleAttributes[2] + "_" + sampleAttributes[3] + "_" + sampleAttributes[4] + "_" + sampleAttributes[5] + "_" + sampleAttributes[6] + "_" + sampleAttributes[7] 
         shortName1 = stemName + '_R1'
         shortName2 = stemName + '_R2'
 
         # break down fastq file info
-        # @A00742:821:H5MHCDSXC:1:1101:1597:1000 1:N:0:TGATGATTCA+CGACTCCTAC
+        # @LH00295:158:22KJLTLT4:2:1101:3743:1042 1:N:0:GTGGATCAAA+CAGGGTTGGC
         # @<instrument>:<run number>:<flowcell ID>:<lane>:<tile>:<x-pos>:<y-pos>
         sampleInfo = sampleInfo.split(':')
         instrument = sampleInfo[0]
@@ -83,23 +83,23 @@ with open('sampleReadGroupInfo_snRNA.txt', 'r') as infile:
         flowcellID = sampleInfo[2]
 
         lane = sampleInfo[3]
+        SEQ = seq_order
         ID = stemID  # ID tag identifies which read group each read belongs to, so each read group's ID must be unique
         SM = fullName  # Sample
-        PU = flowcellID + "." + lane  # Platform Unit
+        PU = flowcellID  # Platform Unit
         LB = '10X'
 
         out = '''
     "{0}":{{
-        "fq_path": "/research/labs/neurology/fryer/projects/PMI/2024_snRNA/01.RawData/{7}/",
-        "fq1": "{1}",
-        "fq2": "{2}",
-        "ID": "{3}",
-        "SM": "{4}",
-        "PU": "{5}",
-        "LB": "{6}",
+        "fq_path": "/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/fastq/",
+        "SEQ": "{1}",
+        "ID": "{2}",
+        "SM": "{3}",
+        "PU": "{4}",
+        "LB": "{5}",
         "PL": "Illumina"
         '''
-        outfile.write(out.format(stemName, sampleName1, sampleName2, stemName, fullName, PU, LB, stemName))
+        outfile.write(out.format(stemName, seq_order, stemName, fullName, PU, LB, stemName))
         if (counter == numSamples):
             outfile.write("}\n}")
         else:
