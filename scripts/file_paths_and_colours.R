@@ -1,4 +1,5 @@
 #--- libraries
+.libPaths(c("/home/kolney/R/x86_64-pc-linux-gnu-library/4.3", "/usr/local/lib/R/site-library", "/usr/local/lib/R/library"))
 library(Seurat)
 library(stringr)
 library(ggplot2)
@@ -12,6 +13,15 @@ library(RColorBrewer)
 library(DESeq2)
 require(openxlsx)
 library(ggrepel)
+library(glmGamPoi)
+library(devtools)
+library(harmony)
+library(DoubletFinder)
+library(reshape2)
+library(ggtree)
+library(DoubletFinder)
+
+
 #detach("package:xlsx", unload = TRUE)
 
 #--- variables

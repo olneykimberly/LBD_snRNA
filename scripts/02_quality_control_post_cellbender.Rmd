@@ -103,7 +103,7 @@ if (file.exists(paste0("../rObjects/", treatment, ".rds"))) {
 # Inspect 
 dataObject
 
-rm(BR_Nuclei_0368, BR_Nuclei_0381, BR_Nuclei_0376, BR_Nuclei_0373, BR_Nuclei_0384, BR_Nuclei_0389, BR_Nuclei_0400, BR_Nuclei_0392, BR_Nuclei_0377, BR_Nuclei_0382, BR_Nuclei_0369, BR_Nuclei_0390, BR_Nuclei_0385, BR_Nuclei_0374, BR_Nuclei_0401, BR_Nuclei_0393, BR_Nuclei_0380, BR_Nuclei_0372, BR_Nuclei_0391, BR_Nuclei_0388, BR_Nuclei_0396, BR_Nuclei_0407, BR_Nuclei_0397, BR_Nuclei_0406, BR_Nuclei_0379, BR_Nuclei_0371, BR_Nuclei_0383, BR_Nuclei_0387, BR_Nuclei_0395, BR_Nuclei_0399, BR_Nuclei_0405, BR_Nuclei_0404, BR_Nuclei_0386, BR_Nuclei_0370, BR_Nuclei_0398, BR_Nuclei_0378, BR_Nuclei_0375, BR_Nuclei_0394, BR_Nuclei_0402, BR_Nuclei_0403)
+#rm(BR_Nuclei_0368, BR_Nuclei_0381, BR_Nuclei_0376, BR_Nuclei_0373, BR_Nuclei_0384, BR_Nuclei_0389, BR_Nuclei_0400, BR_Nuclei_0392, BR_Nuclei_0377, BR_Nuclei_0382, BR_Nuclei_0369, BR_Nuclei_0390, BR_Nuclei_0385, BR_Nuclei_0374, BR_Nuclei_0401, BR_Nuclei_0393, BR_Nuclei_0380, BR_Nuclei_0372, BR_Nuclei_0391, BR_Nuclei_0388, BR_Nuclei_0396, BR_Nuclei_0407, BR_Nuclei_0397, BR_Nuclei_0406, BR_Nuclei_0379, BR_Nuclei_0371, BR_Nuclei_0383, BR_Nuclei_0387, BR_Nuclei_0395, BR_Nuclei_0399, BR_Nuclei_0405, BR_Nuclei_0404, BR_Nuclei_0386, BR_Nuclei_0370, BR_Nuclei_0398, BR_Nuclei_0378, BR_Nuclei_0375, BR_Nuclei_0394, BR_Nuclei_0402, BR_Nuclei_0403)
 ```
 
 # Change indents
@@ -161,6 +161,8 @@ summary(dataObject$percent.hb)
 # percent choroid plexus
 dataObject$percent.choroid <- PercentageFeatureSet(dataObject, features = c("TTR","FOLR1", "PRLR"))
 summary(dataObject$percent.choroid)
+
+RowsNA<-names(which(rowSums(is.na(dataObject@assays$RNA@counts))>0))
 ```
 
 # Pre-filtering QC
@@ -375,7 +377,7 @@ table(dataObject.filtered$Sample_ID)
 ## Gene-level filtering
 Remove lowly expressed genes.  We will keep genes that have at least 1 count in 10 cells.
 ```{r gene_filtering}
-dataObject.filtered <- JoinLayers(dataObject.filtered)
+#dataObject.filtered <- JoinLayers(dataObject.filtered)
 counts <- GetAssayData(object = dataObject.filtered, layer = "counts")
 nonzero <- counts > 0 
 keep <- Matrix::rowSums(nonzero) >= 10  
@@ -406,7 +408,7 @@ print(paste0(dim(counts)[1] - dim(counts.filtered)[1], " features removed"))
 ## Save filtering
 ```{r,echo=FALSE}
 saveRDS(dataObject.filtered, paste0("../rObjects/",treatment,"_filtered.rds"))
-dataObject.filtered <- readRDS(paste0("../rObjects/",treatment,"_filtered.rds"))
+#dataObject.filtered <- readRDS(paste0("../rObjects/",treatment,"_filtered.rds"))
 ```
 
 
@@ -913,7 +915,7 @@ umap0.4
 
 # Clustering QC
 ## Treatment, sample, phase
-```{r umap_treatment}
+```{r umap_treatment1}
 
 # sample
 u2 <- DimPlot(dataObject.filtered, 
@@ -927,7 +929,7 @@ u2
 
 
 ## Revisit QC metrics
-```{r umap_QC}
+```{r umap_QC2}
 # nCount
 f1 <- FeaturePlot(dataObject.filtered, 
             features = "nCount_RNA",
@@ -1027,7 +1029,7 @@ saveToPDF(paste0(path, ".pdf"), width = 20, height = 6)
 
 
 ## Number cells per cluster
-```{r cells_per_cluster}
+```{r cells_per_cluster2}
 treatment_ncells <- FetchData(dataObject.filtered, 
                      vars = c("ident", "group")) %>%
   dplyr::count(ident, group) %>%
@@ -1052,15 +1054,17 @@ sample_ncells
 ```
 
 # Save
-```{r save_object_integrated,echo=FALSE,eval=TRUE}
+```{r save_object_integrated2,echo=FALSE,eval=TRUE}
 # Save integrated seurat object
 saveRDS(dataObject.filtered, paste0("../rObjects/",treatment,"_unannotated_no_integration.rds"))
 dataObject.filtered <- readRDS(file = paste0("../rObjects/",treatment,"_unannotated_no_integration.rds"))
+dataObject.filtered <- readRDS(file = paste0("../rObjects/LBD_unannotated_no_integration.rds"))
+
 ```
 
 # Azimuth
 ```{r Azimuth, eval=FALSE}
-dataObject.filtered <- RunAzimuth(dataObject.filtered, reference = "mousecortexref")
+dataObject.filtered <- RunAzimuth(dataObject.filtered, reference = "humancortex")
 # currently, the object has two layers in the RNA assay: counts, and data
 dataObject.filtered$predicted.subclass
 
@@ -1084,7 +1088,6 @@ dataObject.integrated <- IntegrateLayers(
   orig.reduction = "pca", new.reduction = "harmony",
   verbose = FALSE
 )
-help(IntegrateLayers)
 # Determine the K-nearest neighbor graph
 dataObject.integrated <- FindNeighbors(object = dataObject.integrated, 
                                  reduction = "harmony", # pca, harmony 
@@ -1123,7 +1126,7 @@ saveToPDF(paste0(path, ".pdf"), width = 6, height = 4)
 
 ## Clustering QC
 ## sample, type
-```{r umap_treatment}
+```{r umap_treatment2}
 # sample
 u1 <- DimPlot(dataObject.integrated, 
         label = FALSE,
@@ -1141,7 +1144,7 @@ saveToPDF(paste0(path, ".pdf"), width = 12, height = 8)
 
 
 ## Revisit QC metrics
-```{r umap_QC}
+```{r umap_QC1}
 # nCount
 f1 <- FeaturePlot(dataObject.integrated, 
             features = "nCount_RNA",
@@ -1279,7 +1282,7 @@ bIntgroup
 ```
 
 ## Number cells per cluster
-```{r cells_per_cluster}
+```{r cells_per_cluster1}
 treatment_ncells <- FetchData(dataObject.integrated, 
                      vars = c("ident", "group")) %>%
   dplyr::count(ident, group) %>%
@@ -1341,12 +1344,21 @@ dev.off()
 ```
 
 # Save
-```{r save_object_integrated,echo=FALSE,eval=TRUE}
+```{r save_object_integrated1,echo=FALSE,eval=TRUE}
 # Save integrated seurat object
 #dataObject.integrated$seurat_clusters <- dataObject.integrated$SCT_snn_res.0.8
 saveRDS(dataObject.integrated, paste0("../rObjects/",treatment,"_unannotated_integrated.rds"))
 
-dataObject.integrated <- readRDS(paste0("../rObjects/",treatment,"_unannotated_integrated.rds"))
-
+#dataObject.integrated <- readRDS(paste0("../rObjects/",treatment,"_unannotated_integrated.rds"))
+dataObject.integrated <- readRDS(paste0("../rObjects/cellbender_filtered.rds"))
 ```
 
+# Azimuth 
+https://azimuth.hubmapconsortium.org/references/#Human%20-%20Motor%20Cortex
+```{r Azimuth, eval=FALSE}
+dataObject.integrated <- RunAzimuth(dataObject.filtered, reference = "humancortexref")
+# currently, the object has two layers in the RNA assay: counts, and data
+dataObject.integrated$predicted.subclass
+
+DimPlot(dataObject.integrated, group.by = "predicted.subclass", label = TRUE, label.size = 3) + NoLegend()
+```

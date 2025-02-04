@@ -1,4 +1,26 @@
 # LBD_snRNA
+Lewy Body Dementia Center With Out Walls (LBD CWOW) single nucleus RNAseq processing and analysis.
+Anterior cingulate cortex tissue samples from the Mayo Clinic brain bank were collected for 619 individuals. This single nuclues RNAseq data set is for a subset of those samples; N=40. 
+Raw fastq files are available on SRA, PRJNA1023207.
+
+5 per sex per disease type. 
+
+| Disease                   | Count   |
+| ------------------------- |:-------:|
+| Control                     | 10    |
+| Alzheimer’s disease (AD)    | 10    |
+| Lewy body disease (LBD(S))  | 10    |
+| Lewy body disease (LBD(AS)) | 10    |
+| Lewy body disease (LBD(ATS))| 10    |
+
+This git repo contains scripts for the following:
+-   Metadata analysis
+-   Per processing of single nucleus RNA-sequencing data
+-   Analysis of single nucleus RNA-sequencing data 
+-   Generation of manuscript figures from Olney et al. 2025 publication 
+-   Generation of shiny app for exploration of the results presented in Olney et al. 2025 publication, view app [here](https://fryerlab.shinyapps.io/LBD_snRNA/)
+
+
 *Characterize cell-type transcriptional alterations across neuropathologies:* Dementia pathologies elicit pronounced transcriptional responses in multiple cell types, including damaged and dying neurons, disease-associated microglia (DAM), and reactive disease-associated astrocytes (DAA). In Lewy body disease (LBD), increased SNCA (α-synuclein) expression leads to Lewy bodies' formation, particularly affecting dopaminergic neurons. In Alzheimer's disease (AD), elevated expression of amyloid precursor protein (APP) produces amyloid-β, a key component of amyloid plaques.The transcription patterns of cell types in cases with a combination of Aβ plaques, NFTs, and α-synuclein inclusions are not well understood. Moreover, studies have shown female-specific upregulation of DAM genes attributed to sex differences in microglial responses in AD cases. This project addresses two aims using human single nuclues RNAseq data: 
 
 Aim 1.1 generates and characterizes snRNAseq data (5 per sex per neuropathology; N=40) to test the hypothesis that each neuropathological defined disease exhibits distinct cell-type transcriptional dysregulation.\
@@ -42,18 +64,8 @@ wget "https://cf.10xgenomics.com/supp/cell-exp/refdata-gex-GRCh38-2024-A.tar.gz"
 
 ## File set up
 Samples were sequenced at The Translational Genomics Research Institute (TGen) in Phoenix, Arizona. Files were named like so:
-Example: MAYO_0407_1_BR_Nuclei_C1_X3SC3_A16845_22KJLTLT4_AGCAAGAAGC_L007_R1_001.fastq.gz
-         [0] study
-         [1] patient
-         [2] visit (1 for frozen banked samples)
-         [3] source (2 letter code; BR = brain)
-         [4] fraction (Nuclie or whole)
-         [5] subgroup - C1 is control as they don't know the disease status
-         [6] assay 
-         [7] library (1 letter and 5 numbers)
-         [8] sequence order - was [8:9] barcode 
-         [9] lane
-         [10] strand or index
+Example: MAYO_0407_1_BR_Nuclei_C1_X3SC3_A16845_22KJLTLT4_AGCAAGAAGC_L007_R1_001.fastq.gz\
+[0] study; [1] patient; [2] visit (1 for frozen banked samples); [3] source (2 letter code; BR = brain); [4] fraction (Nuclie or whole); [5] subgroup - C1 is control as they don't know the disease status; [6] assay; [7] library (1 letter and 5 numbers); [8] sequence order - was [8:9] barcode; [9] lane; [10] strand or index
 
 Because of the file naming provided by TGen, we will need to rename the files to be compatiable with cellranger which requires the sequence order to be in the name of the file. First we will obtain the sequencing order, which we have since this was defined by us. This information is the sequence_order.txt file. 
 ```
@@ -74,7 +86,7 @@ Finally we run the rename script to rename the fastq files using the rename_map 
 sh rename_fastqs.sh
 ```
 
-# Snakemake
+## Snakemake for data alignment and removal of ambeint RNA
 1. get read group info
 To obtain sample information, run the get readgroup script.
 ```
