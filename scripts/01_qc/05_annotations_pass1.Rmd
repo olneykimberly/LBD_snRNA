@@ -1,0 +1,857 @@
+---
+title: "annotations"
+author: "Kimberly Olney, PhD"
+date: "03/12/2025"
+output:
+  html_document:
+    theme: cerulean
+    toc: true
+    toc_float: true
+editor_options: 
+  chunk_output_type: inline
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = "/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/scripts/")
+setwd("/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/scripts/")
+```
+
+# Libraris, paths, colors
+```{r echo=FALSE, message=FALSE}
+source(here::here("/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/scripts/", "file_paths_and_colours.R"))
+projectID <- "CWOW_cellbender"
+color.panel <- dittoColors()
+```
+
+# Read in object
+```{r read_object}
+# read object
+dataObject  <- readRDS(paste0("../rObjects/",projectID,"_unannotated_doublets_removed_harmony_int.rds"))
+
+# set the default assay to RNA
+DefaultAssay(dataObject) <- "RNA"
+dataObject$seurat_clusters <- dataObject$SCT_snn_res.0.2
+Idents(dataObject) <- "seurat_clusters"
+dataObject <- NormalizeData(dataObject)
+# inspect
+dataObject
+```
+
+# Number of nuclie per sample
+```{r number_cells}
+# Visualize the number of cell counts per sample
+data <- as.data.frame(table(dataObject$Sample_ID))
+colnames(data) <- c("Sample_ID","frequency")
+
+ncells <- ggplot(data, aes(x = Sample_ID, y = frequency, fill = Sample_ID)) + 
+  geom_col() +
+  theme_classic() +
+  geom_text(aes(label = frequency), 
+            position=position_dodge(width=0.9), 
+            #vjust=-0.25, 
+            hjust = -.025,
+            angle = 90) +
+  #scale_fill_manual(values = sample_colors) + 
+  scale_y_continuous(breaks = seq(0,30000, by = 5000), limits = c(0,30000)) +
+  ggtitle("Filtered: nuclei per sample") +
+  theme(legend.position =  "none") + 
+  theme(axis.text.x = element_text(angle = 45, hjust=1))
+path <- paste0("../results/nuclei_count/",projectID, 
+               "_cells_per_sample_post_QC_and_doublets_removed")
+ncells
+saveToPDF(paste0(path, ".pdf"), width = 12, height = 5)
+
+# mean cell count 
+mean(data$frequency)
+
+# median cell count 
+median(data$frequency)
+```
+
+# UMAP by group and sample
+```{r dimplot1}
+DimPlot(dataObject,
+        group.by = "group")
+
+DimPlot(dataObject,
+        group.by = "Sample_ID")
+```
+
+# Unannotated 
+### UMAP
+```{r unannotated_umap}
+ditto_umap <- dittoDimPlot(object = dataObject,
+             var = "seurat_clusters",
+             do.label = TRUE,
+             labels.highlight = TRUE)
+ditto_umap
+```
+
+### Nuclei count per cluster
+```{r count_per_cluster}
+count_per_cluster <- FetchData(dataObject,
+                               vars = c("ident", "orig.ident")) %>%
+  dplyr::count(ident, orig.ident) %>%
+  tidyr::spread(ident, n)
+count_per_cluster
+
+count_melt <- reshape2::melt(count_per_cluster)
+colnames(count_melt) <- c("ident", "cluster", "number of nuclei")
+count_max <- count_melt[which.max(count_melt$`number of nuclei`), ]
+count_max_value <- count_max$`number of nuclei`
+cellmax <- count_max_value + 2000 # so that the figure doesn't cut off the text
+count_bar <- ggplot(count_melt, aes(x = factor(cluster), y = `number of nuclei`, fill = `ident`)) +
+  geom_bar(
+    stat = "identity",
+    colour = "black",
+    width = 1,
+    position = position_dodge(width = 0.8)
+  ) +
+  geom_text(
+    aes(label = `number of nuclei`),
+    position = position_dodge(width = 0.9),
+    vjust = -0.25,
+    angle = 45,
+    hjust = -.01
+  ) +
+  theme_classic() + 
+  #scale_fill_manual(values = sample_colors) +
+  ggtitle("Number of nuclei per cluster") +  xlab("cluster") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_y_continuous(limits = c(0, cellmax))
+count_bar
+```
+
+### Cluster tree
+```{r cluster_tree}
+dataObject <- BuildClusterTree(
+  object = dataObject,
+  dims = 1:30,
+  reorder = FALSE,
+  reorder.numeric = FALSE
+)
+
+tree <- dataObject@tools$BuildClusterTree
+tree$tip.label <- paste0("Cluster ", tree$tip.label)
+nClusters <- length(tree$tip.label)
+
+path <- paste0("../results/tree/",projectID,
+               "_integrated_UMAP_unannotated")
+pdf(paste0(path, ".pdf"), width = 6, height = 4)
+tree_graph <- ggtree::ggtree(tree, aes(x, y)) +
+  scale_y_reverse() +
+  ggtree::geom_tree() +
+  ggtree::theme_tree() +
+  ggtree::geom_tiplab(offset = 1) +
+  ggtree::geom_tippoint(color = color.panel[1:nClusters],
+                        shape = 16,
+                        size = 5) +
+  coord_cartesian(clip = 'off') +
+  theme(plot.margin = unit(c(0, 2.5, 0, 0), 'cm'))
+tree_graph
+dev.off()
+```
+
+# Azimuth
+```{r azimuth, eval = FALSE}
+dataObject <- RunAzimuth(dataObject, reference = "humancortexref")
+
+ditto_umap <- dittoDimPlot(object = dataObject,
+             var="predicted.subclass",
+             reduction.use = "umap",
+             do.label = TRUE,
+             labels.highlight = TRUE)
+path <- paste0("../results/UMAP/annotated/",projectID,
+               "_integrated_annoated_Azimuth")
+ditto_umap
+saveToPDF(paste0(path, ".pdf"), width = 12, height = 8)
+
+DimPlot(dataObject)
+```
+
+## Markers per cluster
+```{r find_all_markers, eval=FALSE}
+markers <- SeuratWrappers::RunPrestoAll(
+  object = dataObject,
+  assay = "RNA",
+  slot = "counts",
+  only.pos = FALSE
+)
+write.table(markers, 
+            paste0("../results/markers/", projectID, "_markers.tsv"),
+            quote = FALSE,
+            row.names = FALSE)
+saveRDS(markers, paste0("../rObjects/", projectID, "_markers.rds"))
+markers <- readRDS(paste0("../rObjects/", projectID,"_markers.rds"))
+
+# rearrange to order by cluster & filter to only include log2FC > 1 & FDR < 0.05
+ all.markers.strict <- markers %>%
+   group_by(cluster) %>%
+   dplyr::filter(avg_log2FC > 1 & p_val_adj < 0.05)
+
+saveRDS(all.markers.strict, paste0("../rObjects/", projectID,"_markers_log2FC1_q0.01.rds"))
+all.markers.strict <- readRDS(paste0("../rObjects/", projectID,"_markers_log2FC1_q0.01.rds"))
+```
+
+```{r load_markers}
+markers <- readRDS(paste0("../rObjects/", projectID,"_markers.rds"))
+all.markers.strict <- readRDS(paste0("../rObjects/", projectID,"_markers_log2FC1_q0.01.rds"))
+```
+
+# Get markers for each cluster
+```{r markers_per_cluster}
+# unique clusters variable
+unique_clusters <- unique(markers$cluster)
+
+# empty list to store individual cluster data frames
+cluster_list <- list()
+
+# loop through each cluster and create a data frame
+for (i in unique_clusters) {
+  cluster_name <- paste0("cluster", i)
+  cluster_data <- all.markers.strict[all.markers.strict$cluster == i, ]
+  assign(cluster_name, cluster_data)
+  cluster_list[[cluster_name]] <- cluster_data
+}
+```
+
+## Feature plot
+```{r featureplot}
+# UMAP showing the expression of select features
+umap_feature <-
+  FeaturePlot(dataObject,
+              reduction = "umap",
+              features = c("TYROBP", "MOG", "AQP4", "RBFOX3"))
+umap_feature
+
+path <- paste0("../results/UMAP/unannotated/",projectID,
+               "_UMAP_unannotated_integrated_celltype_markers")
+umap_feature
+saveToPDF(paste0(path, ".pdf"), width = 12, height = 12)
+```
+
+# Cluster Annotation
+
+## Cluster 0 - 
+```{r cluster0}
+# Number of cells per condition
+count_per_cluster[,c(1,2)]
+# UMAP with only cluster 0
+DimPlot(object = subset(dataObject, seurat_clusters == "0"),
+        reduction = "umap", 
+        label = TRUE,
+        label.box = TRUE,
+        label.size = 3,
+        repel = TRUE,
+        cols = color.panel[1])
+VlnPlot(dataObject,
+        features = cluster0$gene[1:10],
+        stack = TRUE,
+        flip = TRUE,
+        split.by = "seurat_clusters")
+cluster0$gene[1:10]
+```
+
+## Cluster 1 - 
+```{r cluster1}
+count_per_cluster[,c(1,3)]
+DimPlot(object = subset(dataObject, seurat_clusters == "1"),
+        reduction = "umap", 
+        label = TRUE,
+        label.box = TRUE,
+        label.size = 3,
+        repel = TRUE,
+        cols = color.panel[2])
+VlnPlot(dataObject,
+        features = cluster1$gene[1:10],
+        cols = color.panel,
+        stack = TRUE,
+        flip = TRUE,
+        split.by = "seurat_clusters")
+cluster1$gene[1:10]
+```
+
+## Cluster 2 -
+```{r cluster2}
+count_per_cluster[,c(1,4)]
+DimPlot(object = subset(dataObject, seurat_clusters == "2"),
+        reduction = "umap", 
+        label = TRUE,
+        label.box = TRUE,
+        label.size = 3,
+        repel = TRUE,
+        cols = color.panel[3])
+VlnPlot(dataObject,
+        features = cluster2$gene[1:10],
+        cols = color.panel,
+        stack = TRUE,
+        flip = TRUE,
+        split.by = "seurat_clusters")
+cluster2$gene[1:10]
+```
+
+## Cluster 3 - 
+```{r cluster3}
+count_per_cluster[,c(1,4)]
+DimPlot(object = subset(dataObject, seurat_clusters == "3"),
+        reduction = "umap", 
+        label = TRUE,
+        label.box = TRUE,
+        label.size = 3,
+        repel = TRUE,
+        cols =  color.panel[4])
+VlnPlot(dataObject,
+        features = cluster3$gene[1:10],
+        cols = color.panel,
+        stack = TRUE,
+        flip = TRUE,
+        split.by = "seurat_clusters")
+cluster3$gene[1:10]
+```
+
+## Cluster 4 - 
+```{r cluster4}
+count_per_cluster[,c(1,5)]
+DimPlot(object = subset(dataObject, seurat_clusters == "4"),
+        reduction = "umap", 
+        label = TRUE,
+        label.box = TRUE,
+        label.size = 3,
+        repel = TRUE,
+        cols = color.panel[5])
+VlnPlot(dataObject,
+        features = cluster4$gene[1:10],
+        cols = color.panel,
+        stack = TRUE,
+        flip = TRUE,
+        split.by = "seurat_clusters")
+cluster4$gene[1:10]
+```
+
+## Cluster 5 - 
+```{r cluster5}
+count_per_cluster[,c(1,6)]
+DimPlot(object = subset(dataObject, seurat_clusters == "5"),
+        reduction = "umap", 
+        label = TRUE,
+        label.box = TRUE,
+        label.size = 3,
+        repel = TRUE,
+        cols = color.panel[6])
+VlnPlot(dataObject,
+        features = cluster5$gene[1:10],
+        cols = color.panel,
+        stack = TRUE,
+        flip = TRUE,
+        split.by = "seurat_clusters")
+cluster5$gene[1:10]
+```
+
+## Cluster 6 - 
+```{r cluster6}
+count_per_cluster[,c(1,7)]
+DimPlot(object = subset(dataObject, seurat_clusters == "6"),
+        reduction = "umap", 
+        label = TRUE,
+        label.box = TRUE,
+        label.size = 3,
+        repel = TRUE,
+        cols = "#CC79A7")
+VlnPlot(dataObject,
+        features = cluster6$gene[1:10],
+        cols = color.panel,
+        stack = TRUE,
+        flip = TRUE,
+        split.by = "seurat_clusters")
+cluster6$gene[1:10]
+```
+
+## Cluster 7 - 
+```{r cluster7}
+count_per_cluster[,c(1,8)]
+DimPlot(object = subset(dataObject, seurat_clusters == "7"),
+        reduction = "umap", 
+        label = TRUE,
+        label.box = TRUE,
+        label.size = 3,
+        repel = TRUE,
+        cols = color.panel[8])
+VlnPlot(dataObject,
+        features = cluster7$gene[1:10],
+        cols = color.panel,
+        stack = TRUE,
+        flip = TRUE,
+        split.by = "seurat_clusters")
+cluster7$gene[1:10]
+```
+
+## Cluster 8 - 
+```{r cluster8}
+count_per_cluster[,c(1,9)]
+DimPlot(object = subset(dataObject, seurat_clusters == "8"),
+        reduction = "umap", 
+        label = TRUE,
+        label.box = TRUE,
+        label.size = 3,
+        repel = TRUE,
+        cols = color.panel[9])
+VlnPlot(dataObject,
+        features = cluster8$gene[1:10],
+        cols = color.panel,
+        stack = TRUE,
+        flip = TRUE,
+        split.by = "seurat_clusters")
+cluster8$gene[1:10]
+```
+
+## Cluster 9 - 
+```{r cluster9}
+count_per_cluster[,c(1,10)]
+DimPlot(object = subset(dataObject, seurat_clusters == "9"),
+        reduction = "umap", 
+        label = TRUE,
+        label.box = TRUE,
+        label.size = 3,
+        repel = TRUE,
+        cols = color.panel[10])
+VlnPlot(dataObject,
+        features = cluster9$gene[1:10],
+        cols = color.panel,
+        stack = TRUE,
+        flip = TRUE,
+        split.by = "seurat_clusters")
+cluster9$gene[1:10]
+```
+
+## Cluster 10 -
+```{r cluster10}
+count_per_cluster[,c(1,11)]
+DimPlot(object = subset(dataObject, seurat_clusters == "10"),
+        reduction = "umap", 
+        label = TRUE,
+        label.box = TRUE,
+        label.size = 3,
+        repel = TRUE,
+        cols = color.panel[11])
+VlnPlot(dataObject,
+        features = cluster10$gene[1:10],
+        cols = color.panel,
+        stack = TRUE,
+        flip = TRUE,
+        split.by = "seurat_clusters")
+cluster10$gene[1:10]
+```
+
+## Cluster 11 - 
+```{r cluster11}
+count_per_cluster[,c(1,12)]
+DimPlot(object = subset(dataObject, seurat_clusters == "11"),
+        reduction = "umap", 
+        label = TRUE,
+        label.box = TRUE,
+        label.size = 3,
+        repel = TRUE,
+        cols = color.panel[12])
+VlnPlot(dataObject,
+        features = cluster11$gene[1:10],
+        cols = color.panel,
+        stack = TRUE,
+        flip = TRUE,
+        split.by = "seurat_clusters")
+cluster11$gene[1:10]
+```
+
+## Cluster 12 - 
+```{r cluster12}
+count_per_cluster[,c(1,13)]
+DimPlot(object = subset(dataObject, seurat_clusters == "12"),
+        reduction = "umap", 
+        label = TRUE,
+        label.box = TRUE,
+        label.size = 3,
+        repel = TRUE,
+        cols = color.panel[13])
+VlnPlot(dataObject,
+        features = cluster12$gene[1:10],
+        cols = color.panel,
+        stack = TRUE,
+        flip = TRUE,
+        split.by = "seurat_clusters")
+cluster12$gene[1:10]
+```
+
+## Cluster 13 - 
+```{r cluster13}
+count_per_cluster[,c(1,14)]
+DimPlot(object = subset(dataObject, seurat_clusters == "13"),
+        reduction = "umap", 
+        label = TRUE,
+        label.box = TRUE,
+        label.size = 3,
+        repel = TRUE,
+        cols = color.panel[14])
+VlnPlot(dataObject,
+        features = cluster13$gene[1:10],
+        cols = color.panel,
+        stack = TRUE,
+        flip = TRUE,
+        split.by = "seurat_clusters")
+cluster13$gene[1:10]
+```
+
+## Cluster 14 - 
+```{r cluster14}
+count_per_cluster[,c(1,15)]
+DimPlot(object = subset(dataObject, seurat_clusters == "14"),
+        reduction = "umap", 
+        label = TRUE,
+        label.box = TRUE,
+        label.size = 3,
+        repel = TRUE,
+        cols = color.panel[15])
+VlnPlot(dataObject,
+        features = cluster14$gene[1:10],
+        cols = color.panel,
+        stack = TRUE,
+        flip = TRUE,
+        split.by = "seurat_clusters")
+cluster14$gene[1:10]
+```
+
+## Cluster 15 - 
+```{r cluster15}
+count_per_cluster[,c(1,16)]
+DimPlot(object = subset(dataObject, seurat_clusters == "15"),
+        reduction = "umap", 
+        label = TRUE,
+        label.box = TRUE,
+        label.size = 3,
+        repel = TRUE,
+        cols = color.panel[16])
+VlnPlot(dataObject,
+        features = cluster15$gene[1:10],
+        cols = color.panel,
+        stack = TRUE,
+        flip = TRUE,
+        split.by = "seurat_clusters")
+cluster15$gene[1:10]
+```
+
+## Cluster 16 - 
+```{r cluster16}
+count_per_cluster[,c(1,17)]
+DimPlot(object = subset(dataObject, seurat_clusters == "16"),
+        reduction = "umap", 
+        label = TRUE,
+        label.box = TRUE,
+        label.size = 3,
+        repel = TRUE,
+        cols = color.panel[17])
+VlnPlot(dataObject,
+        features = cluster16$gene[1:10],
+        cols = color.panel,
+        stack = TRUE,
+        flip = TRUE,
+        split.by = "seurat_clusters")
+cluster16$gene[1:10]
+```
+
+## Cluster 17 - 
+```{r cluster17}
+count_per_cluster[,c(1,18)]
+DimPlot(object = subset(dataObject, seurat_clusters == "17"),
+        reduction = "umap", 
+        label = TRUE,
+        label.box = TRUE,
+        label.size = 3,
+        repel = TRUE,
+        cols = color.panel[18])
+VlnPlot(dataObject,
+        features = cluster17$gene[1:10],
+        cols = color.panel,
+        stack = TRUE,
+        flip = TRUE,
+        split.by = "seurat_clusters")
+cluster17$gene[1:10]
+```
+
+## Cluster 18 - 
+```{r cluster18}
+count_per_cluster[,c(1,19)]
+DimPlot(object = subset(dataObject, seurat_clusters == "18"),
+        reduction = "umap", 
+        label = TRUE,
+        label.box = TRUE,
+        label.size = 3,
+        repel = TRUE,
+        cols = color.panel[19])
+VlnPlot(dataObject,
+        features = cluster18$gene[1:10],
+        cols = color.panel,
+        stack = TRUE,
+        flip = TRUE,
+        split.by = "seurat_clusters")
+cluster18$gene[1:10]
+```
+
+
+## Cluster 19 - 
+```{r cluster19}
+count_per_cluster[,c(1,20)]
+DimPlot(object = subset(dataObject, seurat_clusters == "19"),
+        reduction = "umap", 
+        label = TRUE,
+        label.box = TRUE,
+        label.size = 3,
+        repel = TRUE,
+        cols = color.panel[20])
+VlnPlot(dataObject,
+        features = cluster19$gene[1:10],
+        cols = color.panel,
+        stack = TRUE,
+        flip = TRUE,
+        split.by = "seurat_clusters")
+cluster19$gene[1:10]
+```
+
+## Cluster 20 - 
+```{r cluster17}
+count_per_cluster[,c(1,21)]
+DimPlot(object = subset(dataObject, seurat_clusters == "20"),
+        reduction = "umap", 
+        label = TRUE,
+        label.box = TRUE,
+        label.size = 3,
+        repel = TRUE,
+        cols = color.panel[21])
+VlnPlot(dataObject,
+        features = cluster20$gene[1:10],
+        cols = color.panel,
+        stack = TRUE,
+        flip = TRUE,
+        split.by = "seurat_clusters")
+cluster20$gene[1:10]
+```
+
+# Assign identities
+## Individual 
+```{r assign_individual}
+dataObject.annotated <- RenameIdents(object = dataObject, 
+                               "0" = "oligodendrocyte",
+                               "1" = "astrocyte",
+                               "2" = "microglia",
+                               "3" = "astrocyte",
+                               "4" = "polydendrocyte",
+                               "5" = "endothelial",
+                               "6" = "neuron",
+                               "7" = "neuron",
+                               "8" = "astrocyte",
+                               "9" = "oligodendrocyte",
+                               "10" = "neuron",
+                               "11" = "fibroblast",
+                               "12" = "astrocyte",
+                               "13" = "neuron",
+                               "14" = "polydendrocyte",
+                               "15" = "ependyma",
+                               "16" = "mural",
+                               "17" = "ependyma", 
+                               "18" = "microglia",
+                               "19" = "fibroblast", 
+                               "20" = "microglia")
+dataObject.annotated$individual_clusters <- factor(Idents(dataObject.annotated))
+
+path <- paste0("../results/UMAP/annotated/",projectID,
+               "_integrated_UMAP_annotated")
+pdf(paste0(path, ".pdf"), width = 7, height = 5)
+UMAP_ind <- dittoDimPlot(object = dataObject.annotated,
+             var = "individual_clusters",
+             reduction.use = "umap",
+             do.label = TRUE,
+             labels.highlight = TRUE)
+UMAP_ind
+dev.off()
+```
+
+
+
+### Nuclei count per cluster
+```{r annotated_counts_individual}
+count_per_cluster <- FetchData(dataObject.annotated,
+                               vars = c("ident", "orig.ident")) %>%
+  dplyr::count(ident, orig.ident) %>%
+  tidyr::spread(ident, n)
+count_per_cluster
+
+count_melt <- reshape2::melt(count_per_cluster)
+colnames(count_melt) <- c("ident", "cluster", "number of nuclei")
+count_max <- count_melt[which.max(count_melt$`number of nuclei`), ]
+count_max_value <- count_max$`number of nuclei`
+cellmax <- count_max_value + 25000 # so that the figure doesn't cut off the text
+count_bar <- ggplot(count_melt, aes(x = factor(cluster), y = `number of nuclei`, fill = `cluster`)) +
+  geom_bar(
+    stat = "identity",
+    colour = "black",
+    width = 1,
+    position = position_dodge(width = 0.8)
+  ) +
+  geom_text(
+    aes(label = `number of nuclei`),
+    position = position_dodge(width = 0.9),
+    vjust = -0.25,
+    angle = 45,
+    hjust = -.01
+  ) +
+  theme_classic() + scale_fill_manual(values = color.panel) +
+  ggtitle("Number of nuclei per cluster") +  xlab("cluster") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_y_continuous(limits = c(0, cellmax))
+count_bar
+```
+
+```{r nuclei_count_individual, echo=FALSE}
+pdf(
+  paste0(
+    "../results/UMAP/annotated/",
+    projectID,
+    "_individual_clusters_nuclei_count.pdf"
+  ),
+  width = 11,
+  height = 7
+)
+count_bar
+dev.off()
+```
+
+### DotPlot
+```{r dot_individual}
+markers.to.plot <-
+  c(
+"CLU", 
+"GFAP", 
+"AQP4", 
+"GJA1",
+"CLDN5",
+"ADGRF5",
+"FLT1",
+"COL1A1",
+"COL1A2",
+"DCN",
+"HEXB",
+"C1QA",
+"C1QB",
+"C1QC",
+"ITGAM",
+"TYROBP",
+"P2RY12",
+"AIF1",
+"RBFOX1",
+"RBFOX3", 
+"SNAP25",
+"SYT1",
+"GAD1",
+"GAD2",
+"PLP1",
+"MBP", 
+"MOG", 
+"OLIG1",
+"PDGFRA",
+"VCAN",
+"TNR",
+"ACTA2",
+"VTN"
+  )
+
+
+dot_ind <- DotPlot(dataObject.annotated,
+                   features = markers.to.plot, 
+                  # split.by = "strain", 
+                   cluster.idents = TRUE,
+                   dot.scale = 8) + RotatedAxis()
+dot_ind
+```
+
+```{r save_dot_individual, echo=FALSE}
+pdf(
+  paste0(
+    "../results/dot_plot/",
+    projectID,
+    "_clusters_DotPlot_annotation.pdf"
+  ),
+  width = 14,
+  height = 5
+)
+dot_ind
+dev.off()
+```
+
+
+### Relative abundance
+```{r relative_cell_type}
+relative_abundance <- dataObject.annotated@meta.data %>%
+  group_by(individual_clusters, orig.ident) %>%
+  dplyr::count() %>%
+  group_by(orig.ident) %>%
+  dplyr::mutate(percent = 100 * n / sum(n)) %>%
+  ungroup()
+
+
+rel_abun <- ggplot(relative_abundance, aes(x = orig.ident, y = percent, fill = individual_clusters)) +
+  geom_col() +
+  geom_text(aes(label = paste0(round(percent), "%")), 
+            position = position_stack(vjust = 0.5), size = 3, color = "white") +
+  scale_fill_manual(values = color.panel) +
+  ggtitle("Percentage of cell type") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+rel_abun
+
+pdf(
+  paste0(
+    "../results/UMAP/annotated/",
+    projectID,
+    "_clusters_relative_abundance.pdf"
+  ),
+  width = 6,
+  height = 8
+)
+rel_abun
+dev.off()
+```
+
+# Number of nuclie per sample
+```{r number_cells}
+# Visualize the number of cell counts per sample
+data <- as.data.frame(table(dataObject.annotated$Sample_ID))
+colnames(data) <- c("Sample_ID","frequency")
+
+ncells <- ggplot(data, aes(x = Sample_ID, y = frequency, fill = Sample_ID)) + 
+  geom_col() +
+  theme_classic() +
+  geom_text(aes(label = frequency), 
+            position=position_dodge(width=0.9), 
+            #vjust=-0.25, 
+            hjust = -.025,
+            angle = 90) +
+  #scale_fill_manual(values = sample_colors) + 
+  scale_y_continuous(breaks = seq(0,60000, by = 5000), limits = c(0,60000)) +
+  ggtitle("Filtered: nuclei per sample") +
+  theme(legend.position =  "none") + 
+  theme(axis.text.x = element_text(angle = 45, hjust=1))
+path <- paste0("../results/nuclei_count/",projectID, 
+               "_cells_per_sample_post_QC_and_doublets_removed_annotated_before_recluster")
+ncells
+saveToPDF(paste0(path, ".pdf"), width = 10, height = 6)
+
+# mean cell count 
+mean(data$frequency)
+
+# median cell count 
+median(data$frequency)
+```
+
+# Save RDS 
+```{r save_annotations}
+saveRDS(dataObject.annotated, paste0("../rObjects/", projectID, "_annotated_before_recluster.rds"))
+```
+

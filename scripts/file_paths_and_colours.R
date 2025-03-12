@@ -1,16 +1,24 @@
-#--- libraries
-.libPaths(c("/home/kolney/R/x86_64-pc-linux-gnu-library/4.3", "/usr/local/lib/R/site-library", "/usr/local/lib/R/library"))
-library(Seurat)
+#----------------- Libraries
+.libPaths(c("/tgen_labs/jfryer/kolney/R/rstudio-4.3.0-4-with_modules.sif/libs", "/usr/local/lib/R/site-library", "/usr/local/lib/R/library"))
+.libPaths()
+library(Matrix, lib.loc = "/usr/local/lib/R/site-library")
+library(SeuratObject)
+library(Signac)
+library(Seurat) 
 library(stringr)
 library(ggplot2)
+library(harmony)
+library(remaCor)
 library(gridExtra)
 library(grid)
 library(lattice)
-#library(Azimuth)
+library(R.utils)
+library(SeuratWrappers)
+library(Azimuth)
 library(dittoSeq)
 library(dplyr)
 library(RColorBrewer)
-library(DESeq2)
+library(DESeq2) # adds matrix
 require(openxlsx)
 library(ggrepel)
 library(glmGamPoi)
@@ -19,10 +27,27 @@ library(harmony)
 library(DoubletFinder)
 library(reshape2)
 library(ggtree)
-library(DoubletFinder)
-
-
-#detach("package:xlsx", unload = TRUE)
+library(BiocParallel) 
+library(edgeR)  
+library(limma)  
+library(ggrepel) 
+library(ggplot2) 
+library(gplots) 
+library(grDevices)  
+#library(philentropy) 
+library(stringr) 
+library(remaCor)
+library(scales)
+library(tximport)
+library(tidyverse)
+library(GenomicFeatures)
+library(dplyr)
+library(plyr)
+library(gridExtra)
+library(grid)
+library(lattice)
+library(data.table)
+library(openxlsx)
 
 #--- variables
 # paths, colors, shapes and more
@@ -53,15 +78,10 @@ metadata <-
     "/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/metadata/metadata_seq_info.txt")
 
 pathToRef = c("/tgen_labs/jfryer/projects/references/human/GRCh38/refdata-gex-GRCh38-2024-A")
-#pathToRawData = c("/research/labs/neurology/fryer/projects/PMI/")
 gene_info <- read.delim(paste0(pathToRef, "/star/geneInfo.tab"), header = FALSE)
 gene_info = gene_info[-1,]
-gene_info <- gene_info %>% 
-  rename(
-    V1 = "gene_ID",
-    V2 = "gene_name", 
-    V3 = "type"
-  )
+colnames(gene_info) <- c("gene_ID", "gene_name", "type")
+
 
 # cell cycle 
 #cell_cycle_markers <- read.delim("/research/labs/neurology/fryer/projects/references/mouse/cell_cycle_mouse.tsv")

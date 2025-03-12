@@ -10,9 +10,9 @@ cellranger_path = "/tgen_labs/jfryer/kolney/tools/cellranger-9.0.0/bin/cellrange
 rule all:
     input:
      #   expand(
-     #       "{fastq_path}{seq_order}_L002_I1_001.fastq.gz",
+     #       "{fastq_path}{seq_order}_L003_I1_001.fastq.gz",
      #       fastq_path=config["fastq_path"],
-     #       seq_order=[config[sample]["SEQ"] for sample in config["sample_names"]]
+     #       seq_order=[config[sample]["fq"] for sample in config["sample_names"]]
      #   ),
       #  expand("{sample}/outs", sample=config["sample_names"]),
       #  expand(config["cellranger_dir"]+"{sample}/", sample=config["sample_names"]),
