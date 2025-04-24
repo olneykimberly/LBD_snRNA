@@ -1,0 +1,131 @@
+---
+title: "DEG excel tables and volcano plots"
+author: "Kimberly Olney, PhD"
+date: "03/11/2025"
+output:
+  html_document:
+    theme: cerulean
+    toc: true
+    toc_float: true
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = "/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/scripts/")
+setwd("/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/scripts/")
+```
+
+# Libraris, paths, colors
+```{r echo=FALSE, message=FALSE}
+source(here::here("/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/scripts/", "file_paths_and_colours.R"))
+projectID <- "CWOW_cellbender_after_recluster_harm_int_noise_removed_after_annotation"
+color.panel <- dittoColors()
+```
+
+# Heatmap DEGs
+```{r heatmap_DEGs}
+# Read all sheets from the Excel file
+
+contrast_list <- c("AD-AT_vs_CONTROL", "LBD-ATS_vs_CONTROL", "LBD-AS_vs_CONTROL", "LBD-S_vs_CONTROL")
+
+# Create an empty vector to store the union of all cell types
+all_cell_types <- character()
+
+comparison <- "LBD-S_vs_CONTROL"
+# First, loop through all files to gather all unique cell types
+for(comparison in contrast_list){
+  file_path <- paste0("../results/DEGs/DESeq2_pseudobulk_exp_filter/", comparison, ".xlsx")
+  cell_types <- readxl::excel_sheets(file_path)
+  all_cell_types <- union(all_cell_types, cell_types)
+}
+
+# Now, loop through the contrast list again to generate heatmaps
+for(comparison in contrast_list){
+  file_path <- paste0("../results/DEGs/DESeq2_pseudobulk_exp_filter/", comparison, ".xlsx")
+  cell_type_data <- readxl::excel_sheets(file_path) %>%
+    setNames(., .) %>%
+    lapply(function(sheet) readxl::read_excel(file_path, sheet = sheet))
+
+  # Create a data frame to store the counts of differentially expressed genes
+  heatmap_data <- data.frame(
+    cell_type = all_cell_types, # Use the predefined order
+    upregulated = numeric(length(all_cell_types)),
+    downregulated = numeric(length(all_cell_types)),
+    stringsAsFactors = FALSE
+  )
+
+  # Loop through each cell type and count DE genes
+  for (cell_type in names(cell_type_data)) {
+    if (cell_type %in% all_cell_types) {
+      data <- cell_type_data[[cell_type]]
+
+      # Filter for upregulated genes
+      upregulated_genes <- data %>%
+        filter(log2FoldChange > 0.25 & padj < 0.05)
+
+      # Filter for downregulated genes
+      downregulated_genes <- data %>%
+        filter(log2FoldChange < -0.25 & padj < 0.05)
+
+      # Store the counts
+      heatmap_data$upregulated[heatmap_data$cell_type == cell_type] <- nrow(upregulated_genes)
+      heatmap_data$downregulated[heatmap_data$cell_type == cell_type] <- nrow(downregulated_genes)
+    }
+  }
+
+  # Prepare the data for the heatmap
+  heatmap_matrix <- heatmap_data %>%
+    dplyr::select(upregulated, downregulated) %>%
+    as.matrix()
+
+  rownames(heatmap_matrix) <- heatmap_data$cell_type
+
+  # Define the color palette and the fixed min/max values
+  color_palette <- rev(natparks.pals("WindCave"))
+  min_value <- 0        # Set your desired minimum value
+  max_value <- 1000     # Set your desired maximum value
+
+  # Create a sequence of breaks for the color scale
+  color_breaks <- seq(min_value, max_value, length.out = 101) # Creates 100 color intervals
+
+  # Create a matrix for display numbers and their colors
+  display_matrix <- matrix(as.character(heatmap_matrix), nrow = nrow(heatmap_matrix), ncol = ncol(heatmap_matrix))
+  number_color_matrix <- matrix("black", nrow = nrow(heatmap_matrix), ncol = ncol(heatmap_matrix))
+
+  # Identify values outside the color scale range for display purposes (optional)
+  for (i in 1:nrow(heatmap_matrix)) {
+    for (j in 1:ncol(heatmap_matrix)) {
+      if (heatmap_matrix[i, j] > 500) {
+        number_color_matrix[i, j] <- "white"
+      }
+      # Optional: Cap values for color display if they exceed the max
+      if (heatmap_matrix[i, j] > max_value) {
+        heatmap_matrix[i, j] <- max_value
+      }
+    }
+  }
+
+  # Create the heatmap
+  pheatmap(heatmap_matrix,
+           cluster_rows = FALSE,
+           cluster_cols = FALSE,
+           display_numbers = display_matrix,
+           number_color = number_color_matrix,
+           color = colorRampPalette(color_palette)(100),
+           breaks = color_breaks,
+           angle_col = 0,
+           fontsize = 12, 
+           main = paste0(comparison,"\nDifferentially Expressed Genes per Cell Type\nqval < 0.05 & |log2FC| > 0.25"),
+           ylab = "Cell Type",
+           xlab = "Direction",
+           row.names = all_cell_types # Ensure all cell types are included in the same order
+  )
+
+  path <- paste0("../results/heatmaps/DEGs_DESeq2_pseudobulk_", comparison)
+  saveToPDF(paste0(path, ".pdf"), width = 7, height = 5)
+}
+```
+
+
+

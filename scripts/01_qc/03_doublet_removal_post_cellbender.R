@@ -229,10 +229,10 @@ dataObject <- FindClusters(object = dataObject,
                                  resolution = seq(0.2,1,by=0.2))
 
 saveRDS(dataObject, paste0("../rObjects/",projectID,"_unannotated_doublets_removed.rds"))
-
+dataObject <- readRDS(paste0("../rObjects/",projectID,"_unannotated_doublets_removed.rds"))
 ## ----umap_noDoublets----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-Idents(dataObject) <- dataObject$SCT_snn_res.0.6
-dataObject$seurat_clusters <- dataObject$SCT_snn_res.0.6
+Idents(dataObject) <- dataObject$SCT_snn_res.0.2
+dataObject$seurat_clusters <- dataObject$SCT_snn_res.0.2
 ditto_umap <- dittoDimPlot(object = dataObject,
              var = "seurat_clusters",
              reduction.use = "umap",
@@ -240,11 +240,69 @@ ditto_umap <- dittoDimPlot(object = dataObject,
              labels.highlight = TRUE)
 
 path <- paste0("../results/UMAP/unannotated/",projectID,
-               "_UMAP_unannotated_doublets_removed")
+               "_UMAP_unannotated_doublets_removed_res0.2")
 ditto_umap
-saveToPDF(paste0(path, ".pdf"), width = 7, height = 6.6)
+saveToPDF(paste0(path, ".pdf"), width = 8, height = 7)
+
+## ----dot_individual-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+markers.to.plot <-
+  c(
+    "CLU", 
+    "GFAP", 
+    "AQP4", 
+    "GJA1",
+    "CLDN5",
+    "ADGRF5",
+    "FLT1",
+    "COL1A1",
+    "COL1A2",
+    "DCN",
+    "HEXB",
+    "C1QA",
+    "C1QB",
+    "C1QC",
+    "TMEM119",
+    "ITGAM",
+    "TYROBP",
+    "P2RY12",
+    "AIF1",
+    "RBFOX1",
+    "RBFOX3", 
+    "SNAP25",
+    "SYT1",
+    "GAD1",
+    "GAD2",
+    "PLP1",
+    "MBP", 
+    "MOG", 
+    "OLIG1",
+    "PDGFRA",
+    "VCAN",
+    "TNR",
+    "ACTA2",
+    "VTN"
+  )
+
+dot_ind <- DotPlot(dataObject,
+                   features = markers.to.plot, 
+                   cluster.idents = TRUE,
+                   dot.scale = 8) + RotatedAxis()
+
+## ----save_dot_individual
+pdf(
+  paste0(
+    "../results/dot_plot/",
+    projectID,
+    "_clusters_DotPlot_no_integration_doublets_removed_res0.2.pdf"
+  ),
+  width = 14,
+  height = 10
+)
+dot_ind
+dev.off()
 
 ## ----harmony_int----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# PrepSCTIntegration() 	- Prepare an object list normalized with sctransform for integration.
 set.seed(45)
 dataObject.integrated <- IntegrateLayers(
   object = dataObject, method = HarmonyIntegration,
@@ -259,6 +317,8 @@ dataObject.integrated <- FindNeighbors(object = dataObject.integrated,
 
 # Determine the clusters for various resolutions
 dataObject.integrated <- FindClusters(object = dataObject.integrated, resolution = 0.2)
+
+
 dataObject.integrated <- RunUMAP(dataObject.integrated, reduction = "harmony", dims = 1:30)
 
 p1 <- DimPlot(
@@ -269,69 +329,31 @@ p1 <- DimPlot(
 )
 p1
 ## ----nuclei_per_cluster_noDoublets--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-Idents(dataObject) <- dataObject$seurat_clusters
-sample_ncells <- FetchData(dataObject, 
+Idents(dataObject.integrated ) <- dataObject.integrated$seurat_clusters
+sample_ncells <- FetchData(dataObject.integrated , 
                      vars = c("ident", "sample")) %>%
   dplyr::count(ident,sample) %>%
   tidyr::spread(ident, n)
 write.table(sample_ncells, 
             paste0("../results/nuclei_count/",
                    projectID, 
-                   "_nuclei_per_cluster_doublets_removed.txt"),
+                   "_nuclei_per_cluster_doublets_removed_harm_int.txt"),
             quote = FALSE, sep = "\t")
 sample_ncells
 
 
-## ----dot_individual-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-markers.to.plot <-
-  c(
-"CLU", 
-"GFAP", 
-"AQP4", 
-"GJA1",
-"CLDN5",
-"ADGRF5",
-"FLT1",
-"COL1A1",
-"COL1A2",
-"DCN",
-"HEXB",
-"C1QA",
-"C1QB",
-"C1QC",
-"TMEM119",
-"ITGAM",
-"TYROBP",
-"P2RY12",
-"AIF1",
-"RBFOX1",
-"RBFOX3", 
-"SNAP25",
-"SYT1",
-"GAD1",
-"GAD2",
-"PLP1",
-"MBP", 
-"MOG", 
-"OLIG1",
-"PDGFRA",
-"VCAN",
-"TNR",
-"ACTA2",
-"VTN"
-  )
 
-dot_ind <- DotPlot(dataObject,
+## ----save_dot_individual_with_int
+dot_ind <- DotPlot(dataObject.integrated,
                    features = markers.to.plot, 
                    cluster.idents = TRUE,
                    dot.scale = 8) + RotatedAxis()
 
-## ----save_dot_individual, echo=FALSE------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 pdf(
   paste0(
     "../results/dot_plot/",
     projectID,
-    "_clusters_DotPlot_no_integration_doublets_removed.pdf"
+    "_clusters_DotPlot_harmony_integration_doublets_removed.pdf"
   ),
   width = 14,
   height = 10
@@ -339,7 +361,17 @@ pdf(
 dot_ind
 dev.off()
 
+ditto_umap <- dittoDimPlot(object = dataObject.integrated,
+                           var = "seurat_clusters",
+                           reduction.use = "umap",
+                           do.label = TRUE,
+                           labels.highlight = TRUE)
+
+path <- paste0("../results/UMAP/unannotated/",projectID,
+               "_UMAP_unannotated_doublets_removed_harm_int_res0.2")
+ditto_umap
+saveToPDF(paste0(path, ".pdf"), width = 8, height = 7)
 
 ## ----save_object,echo=FALSE,eval=TRUE-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-saveRDS(dataObject, paste0("../rObjects/",projectID,"_unannotated_doublets_removed_harmony_int.rds"))
+saveRDS(dataObject.integrated, paste0("../rObjects/",projectID,"_unannotated_doublets_removed_harmony_int.rds"))
 ## -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
