@@ -104,3 +104,21 @@ TGen uses sbatch. This script will need to be updated based on your institution'
 cd scripts/01_alignment/
 sbatch run_snakemake.sh
 ```
+Post alignment will include both cellranger and cellbender outputs. 
+
+## Quality control 
+
+1. create cellranger seurat object 
+```
+01_create_seurat_object_cellranger.R # output is robject CWOW_cellranger.rds
+```
+
+2. create cellranger seurat object 
+```
+01_create_seurat_object_cellranger.R # output is robject CWOW_cellranger.rds
+```
+
+3. basic quality filtering such as min and max nCount, nFeature, and percent MT
+```
+02_quality_control_post_cellranger.Rmd
+```
