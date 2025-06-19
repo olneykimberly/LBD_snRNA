@@ -99,6 +99,8 @@ python create_config.py
 ```
 
 3. run the snakemake file. 
+TGen uses sbatch. This script will need to be updated based on your institution's High-Performance Computing (HPC) system and job scheduler.
 ```
-
+cd scripts/01_alignment/
+sbatch run_snakemake.sh
 ```

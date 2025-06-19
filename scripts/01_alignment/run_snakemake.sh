@@ -1,12 +1,12 @@
 #!/bin/bash
-#SBATCH --job-name=cellranger                         
+#SBATCH --job-name=cellranger_and_bender                         
 ##SBATCH --nodes=1                                     
 ##SBATCH --tasks=32                                      
 #SBATCH --time=48:00:00 # 8 hours   
 #SBATCH -n 4 # threaded 
 #SBATCH --mem=4G 
-#SBATCH -o slurm.cellbender.out
-#SBATCH -e slurm.cellbender.err
+#SBATCH -o slurm.cwow_sn_alignment.out
+#SBATCH -e slurm.cwow_sn_alignment.err
 
 # source your bach profile to get your specific settings  
 source $HOME/.bash_profile
