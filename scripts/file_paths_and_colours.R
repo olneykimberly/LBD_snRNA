@@ -1,4 +1,6 @@
 #----------------- Libraries
+set.seed(28)
+
 .libPaths(c("/tgen_labs/jfryer/kolney/R/rstudio-4.3.0-4-with_modules.sif/libs", "/usr/local/lib/R/site-library", "/usr/local/lib/R/library"))
 .libPaths()
 library(Matrix, lib.loc = "/usr/local/lib/R/site-library")
@@ -87,9 +89,10 @@ colnames(gene_info) <- c("gene_ID", "gene_name", "type")
 
 
 # cell cycle 
-#cell_cycle_markers <- read.delim("/research/labs/neurology/fryer/projects/references/mouse/cell_cycle_mouse.tsv")
-#m.s.genes <- subset(cell_cycle_markers, phase == "S")
-#m.g2m.genes <- subset(cell_cycle_markers, phase != "S")
+# A list of cell cycle markers, from Tirosh et al, 2015, is loaded with Seurat.  We can
+# segregate this list into markers of G2/M phase and markers of S phase
+s.genes <- cc.genes$s.genes
+g2m.genes <- cc.genes$g2m.genes
 
 #--- functions 
 saveToPDF <- function(...) {
@@ -112,4 +115,42 @@ fromList <- function (input) {
   row.names(data) <- elements
   return(data)
 }
+
+markers.to.plot <-
+  c(
+    "CLU", 
+    "GFAP", 
+    "AQP4", 
+    "GJA1",
+    "CLDN5",
+    "ADGRF5",
+    "FLT1",
+    "COL1A1",
+    "COL1A2",
+    "DCN",
+    "HEXB",
+    "C1QA",
+    "C1QB",
+    "C1QC",
+    "TMEM119",
+    "ITGAM",
+    "TYROBP",
+    "P2RY12",
+    "AIF1",
+    "RBFOX1",
+    "RBFOX3", 
+    "SNAP25",
+    "SYT1",
+    "GAD1",
+    "GAD2",
+    "PLP1",
+    "MBP", 
+    "MOG", 
+    "OLIG1",
+    "PDGFRA",
+    "VCAN",
+    "TNR",
+    "ACTA2",
+    "VTN"
+  )
 

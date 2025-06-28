@@ -21,7 +21,7 @@ setwd("/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/scripts/")
 # Libraris, paths, colors
 ```{r echo=FALSE, message=FALSE}
 source(here::here("/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/scripts/", "file_paths_and_colours.R"))
-projectID <- "CWOW_cellranger"
+projectID <- "CWOW_cellbender"
 
 # Remove sample
 metadata <- subset(metadata, Sample_ID != "LBD_AS_F4")
