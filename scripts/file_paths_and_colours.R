@@ -53,6 +53,8 @@ library(readxl)
 library(pheatmap)
 library(NatParksPalettes)
 library(UpSetR)
+library(cowplot)
+library(ggpubr)
 
 #--- variables
 # paths, colors, shapes and more
@@ -76,6 +78,7 @@ colorbindColors <- dittoColors()
 correlationColors <-
   colorRampPalette(c("#4477AA", "#77AADD", "#FFFFFF", "#EE9988", "#BB4444"))
 
+color.panel <- dittoColors()
 
 #--- references and metadata
 metadata <-
