@@ -55,6 +55,11 @@ library(NatParksPalettes)
 library(UpSetR)
 library(cowplot)
 library(ggpubr)
+library(patchwork) # For combining plots
+library(SeuratData)
+options(future.globals.maxSize = 1e9)
+
+
 
 #--- variables
 # paths, colors, shapes and more
