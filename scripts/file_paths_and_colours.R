@@ -1,8 +1,8 @@
 #----------------- Libraries
 set.seed(28)
-
 .libPaths(c("/tgen_labs/jfryer/kolney/R/rstudio-4.3.0-4-with_modules.sif/libs", "/usr/local/lib/R/site-library", "/usr/local/lib/R/library"))
 .libPaths()
+#unloadNamespace("RSpectra")
 library(Matrix, lib.loc = "/usr/local/lib/R/site-library")
 library(SeuratObject)
 library(Signac)
@@ -57,8 +57,10 @@ library(cowplot)
 library(ggpubr)
 library(patchwork) # For combining plots
 library(SeuratData)
-options(future.globals.maxSize = 1e9)
+library(batchelor)
 
+#options(future.globals.maxSize = 1e9)
+options(future.globals.maxSize = 150 * 1024^3)
 
 
 #--- variables
