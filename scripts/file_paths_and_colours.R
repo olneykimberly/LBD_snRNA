@@ -3,6 +3,7 @@ set.seed(28)
 .libPaths(c("/tgen_labs/jfryer/kolney/R/rstudio-4.3.0-4-with_modules.sif/libs", "/usr/local/lib/R/site-library", "/usr/local/lib/R/library"))
 .libPaths()
 #unloadNamespace("RSpectra")
+#library(Matrix)
 library(Matrix, lib.loc = "/usr/local/lib/R/site-library")
 library(SeuratObject)
 library(Signac)
@@ -65,17 +66,13 @@ options(future.globals.maxSize = 150 * 1024^3)
 
 #--- variables
 # paths, colors, shapes and more
-LBD <- "LBD"
-AD <- "AD"
-PA <- "PA"
-CONTROL <- "CONTROL"
-control_color <- "#4682B4" 
-AD_color <- "#B4464B" 
-LBD_color <- "gray35" 
-control_shape <- c(15) # square
-AD_shape <- c(16) # circle
-PA_shape <- c(17) # triangle
-LBD_shape <- c(18) # diamond
+color_control <- "#4682B4" 
+color_AD <- "#B4464B" 
+color_LBD <- "gray35" 
+shape_control <- c(15) # square
+shape_AD <- c(16) # circle
+shape_PA <- c(17) # triangle
+shape_LBD <- c(18) # diamond
 
 TypeColors <- c("#4682B4","#B4464B", "gray35")
 ATSColors <- c("#4682B4","#B4464B", "gray35", "gray65", "gray", "gray85")
@@ -101,15 +98,10 @@ colnames(gene_info) <- c("gene_ID", "gene_name", "type")
 # cell cycle 
 # A list of cell cycle markers, from Tirosh et al, 2015, is loaded with Seurat.  We can
 # segregate this list into markers of G2/M phase and markers of S phase
-s.genes <- cc.genes$s.genes
-g2m.genes <- cc.genes$g2m.genes
+genes.s <- cc.genes$s.genes
+genes.g2m <- cc.genes$g2m.genes
 
 #--- functions 
-saveToPDF <- function(...) {
-  d = dev.copy(pdf, ...)
-  dev.off(d)
-}
-
 fromList <- function (input) {
   # Same as original fromList()...
   elements <- unique(unlist(input))
