@@ -1,7 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=cellranger_and_bender                         
-##SBATCH --nodes=1                                     
-##SBATCH --tasks=32                                      
+#SBATCH --job-name=cwow_sn_alignment                        
 #SBATCH --time=48:00:00 # 8 hours   
 #SBATCH -n 4 # threaded 
 #SBATCH --mem=4G 
@@ -25,4 +23,4 @@ conda activate LBD_sn
 # 3) run snakemake for cellranger and cellbender
 # If only running cellranger, than only 1 task, 2 cpus per task and 4G is sufficent, cellbender requires much more. GPU is preferred. Refer to cellbender documentation. 
 #snakemake -s Snakefile -j 32 --nolock --latency-wait 15 --rerun-incomplete --cluster "sbatch --ntasks 1 --cpus-per-task=2 --mem=4G --time=00:20:00"
-snakemake -s Snakefile -j 40 --nolock --latency-wait 15 --cluster "sbatch --ntasks 1 --cpus-per-task=8 --mem=64G --time=60:00:00"
+snakemake -s Snakefile -j 40 --nolock --latency-wait 15 --cluster "sbatch --ntasks 1 --cpus-per-task=8 --mem=64G --time=24:00:00"

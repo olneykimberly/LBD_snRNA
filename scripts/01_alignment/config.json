@@ -10,7 +10,7 @@
     "human_fa" : "/tgen_labs/jfryer/projects/references/human/GRCh38/refdata-gex-GRCh38-2024-A/fasta/genome.fa",
     
     "Comment_Sample_Info": "The following section lists the samples that are to be analyzed",
-    "sample_names": ['BR_Nuclei_0368', 'BR_Nuclei_0369', 'BR_Nuclei_0370', 'BR_Nuclei_0371', 'BR_Nuclei_0372', 'BR_Nuclei_0373', 'BR_Nuclei_0374', 'BR_Nuclei_0375', 'BR_Nuclei_0376', 'BR_Nuclei_0377', 'BR_Nuclei_0378', 'BR_Nuclei_0379', 'BR_Nuclei_0380', 'BR_Nuclei_0381', 'BR_Nuclei_0382', 'BR_Nuclei_0383', 'BR_Nuclei_0384', 'BR_Nuclei_0385', 'BR_Nuclei_0386', 'BR_Nuclei_0387', 'BR_Nuclei_0388', 'BR_Nuclei_0389', 'BR_Nuclei_0390', 'BR_Nuclei_0391', 'BR_Nuclei_0392', 'BR_Nuclei_0393', 'BR_Nuclei_0394', 'BR_Nuclei_0395', 'BR_Nuclei_0396', 'BR_Nuclei_0397', 'BR_Nuclei_0398', 'BR_Nuclei_0399', 'BR_Nuclei_0400', 'BR_Nuclei_0401', 'BR_Nuclei_0402', 'BR_Nuclei_0403', 'BR_Nuclei_0404', 'BR_Nuclei_0405', 'BR_Nuclei_0406', 'BR_Nuclei_0407'],
+    "sample_names": ['BR_Nuclei_0368', 'BR_Nuclei_0369', 'BR_Nuclei_0370', 'BR_Nuclei_0371', 'BR_Nuclei_0372', 'BR_Nuclei_0373', 'BR_Nuclei_0374', 'BR_Nuclei_0375',  'BR_Nuclei_0377', 'BR_Nuclei_0378', 'BR_Nuclei_0379', 'BR_Nuclei_0380', 'BR_Nuclei_0381', 'BR_Nuclei_0382', 'BR_Nuclei_0383', 'BR_Nuclei_0384', 'BR_Nuclei_0385', 'BR_Nuclei_0386', 'BR_Nuclei_0387', 'BR_Nuclei_0388', 'BR_Nuclei_0389', 'BR_Nuclei_0390', 'BR_Nuclei_0391', 'BR_Nuclei_0392', 'BR_Nuclei_0393', 'BR_Nuclei_0395', 'BR_Nuclei_0396', 'BR_Nuclei_0397', 'BR_Nuclei_0398', 'BR_Nuclei_0399', 'BR_Nuclei_0400', 'BR_Nuclei_0401', 'BR_Nuclei_0402', 'BR_Nuclei_0405', 'BR_Nuclei_0406'], 
 
     "BR_Nuclei_0368":{
         "fq_path": "/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/fastq/",

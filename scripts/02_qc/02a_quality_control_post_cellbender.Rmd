@@ -21,27 +21,7 @@ setwd("/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/scripts/")
 # Libraris, paths, colors
 ```{r echo=FALSE, message=FALSE}
 source(here::here("/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/scripts/", "file_paths_and_colours.R"))
-projectID <- "CWOW_cellbender"
-
-# Remove sample
-metadata <- subset(metadata, Sample_ID != "LBD_AS_F4")
-metadata$sampleID <- factor(metadata$Sample_ID, levels = c(metadata$Sample_ID))
-samples <- metadata$sampleID 
-sex_order <- factor(metadata$sex_inferred, levels = unique(metadata$sex_inferred))
-disease_order <- factor(metadata$TYPE, levels = c("CONTROL", "AD_AT", "LBD_S", "LBD_AS", "LBD_ATS"))
-
-metadata <- metadata %>%
-  mutate(sampleID = gsub(".*_(\\d+)_.*_(BR_Nuclei).*", "\\2_\\1", Lane.Name))
-samples <- metadata$sampleID 
-
-# sampleID with disease_order
-order <- metadata %>%
-  arrange(disease_order) %>%
-  dplyr::select(TYPE, sampleID, Sample_ID)
-write.table(order, "order.txt", quote = F, row.names = F, sep = "\t")
-samples <- order$sampleID
-disease_order <- order$TYPE
-sample_order <- factor(order$Sample_ID, levels = order$Sample_ID)
+project_ID <- "CWOW_cellbender"
 ```
 
 # Genes 
@@ -56,10 +36,16 @@ if (file.exists("../../rObjects/annotation.rds")) {
   saveRDS(genes, "../rObjects/annotation.rds")
 }
 
+# gene table is an overview of the types of genes in the annotation file 
 gene_type_table <- table(genes$gene_type)
 write.table(gene_type_table, "gene_type_table.tsv", row.names = F, quote = F, sep = "\t")
+write.table(genes, "genes.tsv", row.names = F, quote = F, sep = "\t")
+
+# obtain the MT genes. Will be used for filtering down stream. 
 mt.genes.df <- subset(genes, seqnames == "chrM")
-mt.genes <- mt.genes.df$gene_name
+genes_mt <- mt.genes.df$gene_name # 13 Mito genes 
+
+rm(mt.genes.df, gene_type_table)
 ```
 
 # QC thresholds
@@ -70,16 +56,16 @@ nCount.min <- 1000
 nCount.max <- 100000 
 nFeature.min <- 800
 nFeature.max<- 12000
-complexity.cutoff <- 0.80
-mt.cutoff <- 5
-hb.cutoff <- 1
-ribo.cutoff <- 1
-choroid.cutoff <- 1
+cutoff_complexity <- 0.80
+cutoff_mt <- 5
+cutoff_hb <- 1
+cutoff_ribo <- 1
+cutoff_choroid <- 1
 ```
 
 # Setup seurat object
 ```{r seurat_object}
-dataObject <- readRDS(paste0("../../rObjects/", projectID, ".rds"))
+dataObject <- readRDS(paste0("../../rObjects/", project_ID, ".rds"))
 ```
 
 # Change indents
@@ -88,61 +74,67 @@ barcodes <- colnames(dataObject)
 sample <- str_match(barcodes, "(.+)_[ACGT]+")[,2]
 table(sample)
 unique(sample)
-dataObject$sample <- factor(sample, levels = samples)
-table(dataObject$sample)  # check
-Idents(dataObject) <- dataObject$sample
+dataObject$sample <- factor(sample)
+
+# samples to be removed
+rm_samples <- c("BR_Nuclei_0404", "BR_Nuclei_0376", "BR_Nuclei_0407", "BR_Nuclei_0394", "BR_Nuclei_0403") # BR_Nuclei_0404
+# cell IDs
+cells_to_remove <- rownames(dataObject@meta.data)[dataObject@meta.data$sample %in% rm_samples]
+cells_to_remove_found <- intersect(cells_to_remove, colnames(dataObject))
+# Check 
+print(paste("Found", length(cells_to_remove_found), "cells to remove out of", length(colnames(dataObject)), "requested."))
+# Use the 'cells_to_remove_found' variable to safely subset the data
+dataObject_filtered <- subset(x = dataObject, cells = colnames(dataObject)[!colnames(dataObject) %in% cells_to_remove_found])
+
+# 1. Access the metadata and apply droplevels() to the 'sample' column
+dataObject_filtered$sample <- droplevels(dataObject_filtered$sample)
+# 2. Verify that the unused levels are gone
+table(dataObject_filtered$sample)
 ```
 
-Add metadata to seurate object
-```{r condition_column}
-# Match the samples to the dataObject
-#sample_match <- match(dataObject$sample, samples)
-seurat_sample_order <- as.character(dataObject$sample)
-matched_metadata <- metadata[match(seurat_sample_order, as.character(metadata$sampleID)), ]
+```{r}
+rm(rm_samples, cells_to_remove, cells_to_remove_found, barcodes, dataObject)
+dataObject <- dataObject_filtered
+rm(dataObject_filtered)
+```
 
-# Verify the order after matching
-if (!all.equal(seurat_sample_order, matched_metadata$sampleID)) {
-  stop("Sample order mismatch after matching metadata. Please check your sample IDs.")
-}
+# Reorder samples
+```{r reorder_samples}
+barcodes <- colnames(dataObject)
+sample <- str_match(barcodes, "(.+)_[ACGT]+")[,2]
+dataObject$sample <- factor(sample, levels = order_samples)
+table(dataObject$sample)  # check
+Idents(dataObject) <- dataObject$sample
+rm(sample, barcodes)
+```
 
-# Add the metadata columns to the Seurat object's metadata
-dataObject$Sample_ID <- factor(matched_metadata$Sample_ID, levels = unique(matched_metadata$Sample_ID))
-dataObject$sex <- matched_metadata$sex_inferred
-dataObject$age <- matched_metadata$Age
-dataObject$PathDx <- matched_metadata$PathDx
-dataObject$group <- matched_metadata$TYPE
-dataObject$group <- factor(dataObject$group, levels = c("CONTROL", "AD_AT", "LBD_S", "LBD_AS", "LBD_ATS"))
-matched_metadata$Cing.LB[is.na(matched_metadata$Cing.LB)] <- 0
-matched_metadata$Braak.NFT[is.na(matched_metadata$Braak.NFT)] <- 0
-matched_metadata$Thal.amyloid[is.na(matched_metadata$Thal.amyloid)] <- 0
-matched_metadata$MF.SP[is.na(matched_metadata$MF.SP)] <- 0
-matched_metadata$MF.NFT[is.na(matched_metadata$MF.NFT)] <- 0
-matched_metadata$MF.LB[is.na(matched_metadata$MF.LB)] <- 0
-matched_metadata$MF.Amyloid[is.na(matched_metadata$MF.Amyloid)] <- 0
-matched_metadata$MF.Tau[is.na(matched_metadata$MF.Tau)] <- 0
-matched_metadata$Cing.Synuclein[is.na(matched_metadata$Cing.Synuclein)] <- 0
-dataObject$ClinicalDx <- matched_metadata$ClinicalDx
-dataObject$FHx <- matched_metadata$FHx
-dataObject$APOE <- matched_metadata$APOE
-dataObject$MAPT <- matched_metadata$MAPT
-dataObject$GRN <- matched_metadata$GRN
-dataObject$TMEM106b <- matched_metadata$TMEM106b
-dataObject$RIN <- matched_metadata$RIN
+# Add metadata
+```{r}
+# Assuming 'metadata' is your metadata dataframe
+# and its 'sampleID' column contains the cell IDs (the same IDs as the Seurat object's cells)
+rownames(metadata) <- metadata$sampleID
+# Reorder the metadata data frame to match the column order of the Seurat object
+barcodes <- colnames(dataObject)
+sample <- str_match(barcodes, "(.+)_[ACGT]+")[,2]
+metadata_reordered <- metadata[sample, ]
+# Add the entire metadata dataframe to the Seurat object
+# Add the reordered metadata to the Seurat object
+dataObject <- AddMetaData(object = dataObject, metadata = metadata_reordered)
+dataObject$group <- factor(dataObject$TYPE, levels = c("CONTROL", "AD_AT", "LBD_S", "LBD_AS", "LBD_ATS"))
 ```
 
 nuclei count per sample, sex, and group
 ```{r}
 # Sample
-table(dataObject$sample) 
+table(sobj$sample) 
 table(dataObject$Sample_ID) 
 
 # Sex 
-table(dataObject$sex) 
+table(dataObject$sex)
 
 # Type
 table(dataObject$group) 
 ```
-
 
 QC columns 
 ```{r QC_columns}
@@ -153,7 +145,7 @@ dataObject$cell.complexity <- log10(dataObject$nFeature_RNA) / log10(dataObject$
 
 # Chromosome M
 gene.names <- rownames(dataObject)
-dataObject$percent.mt <- PercentageFeatureSet(dataObject, features = mt.genes)
+dataObject$percent.mt <- PercentageFeatureSet(dataObject, features = genes_mt)
 summary(dataObject$percent.mt)
 
 "^RPS|^RPL"
@@ -195,6 +187,8 @@ ncells1 <- ggplot(data, aes(x = Sample_ID, y = frequency, fill = Sample_ID)) +
   theme(legend.position =  "none") + 
   theme(axis.text.x = element_text(angle = 45, hjust=1))
 ncells1
+
+rm(data)
 ```
 
 ## Density plots
@@ -252,8 +246,8 @@ den3 <- ggplot(dataObject@meta.data,
   #scale_fill_manual(values = sample_colors) +
   xlab("Cell Complexity (log10(nFeature/nCount))") +
   ylab("Density") +
-  geom_vline(xintercept = complexity.cutoff) + theme(legend.position="none")  +
-  annotate("text", x = complexity.cutoff, y = 0.1, label = paste("Min:", complexity.cutoff), 
+  geom_vline(xintercept = cutoff_complexity) + theme(legend.position="none")  +
+  annotate("text", x = cutoff_complexity, y = 0.1, label = paste("Min:", cutoff_complexity), 
            angle = 0, vjust = -0.5, hjust = -0.1, size = 3)
 
 # Visualize percent.mt
@@ -264,12 +258,12 @@ den4 <- ggplot(dataObject@meta.data,
   geom_density(alpha = 0.2) +
   theme_classic() +
   scale_x_continuous(n.breaks = 4) +
-  geom_vline(xintercept = mt.cutoff) +
+  geom_vline(xintercept = cutoff_mt) +
   #scale_color_manual(values = sample_colors) +
   #scale_fill_manual(values = sample_colors) +
   xlab("% Mitochondrial Genes") +
   ylab("Density")+ theme(legend.position="none")  +
-  annotate("text", x = mt.cutoff, y = 0.1, label = paste("Max:", mt.cutoff), 
+  annotate("text", x = cutoff_mt, y = 0.1, label = paste("Max:", cutoff_mt), 
            angle = 0, vjust = -0.5, hjust = -0.1, size = 3)
 
 
@@ -281,12 +275,12 @@ den5 <- ggplot(dataObject@meta.data,
   geom_density(alpha = 0.2) +
   theme_classic() +
   scale_x_continuous(n.breaks = 4) +
-  geom_vline(xintercept = ribo.cutoff) +
+  geom_vline(xintercept = cutoff_ribo) +
   #scale_color_manual(values = sample_colors) +
   #scale_fill_manual(values = sample_colors) +
   xlab("% Ribosomal Genes") +
   ylab("Density")+ theme(legend.position="none")  +
-  annotate("text", x = ribo.cutoff, y = 0.1, label = paste("Max:", ribo.cutoff), 
+  annotate("text", x = cutoff_ribo, y = 0.1, label = paste("Max:", cutoff_ribo), 
            angle = 0, vjust = -0.5, hjust = -0.1, size = 3)
 
 
@@ -298,12 +292,12 @@ den6 <- ggplot(dataObject@meta.data,
   geom_density(alpha = 0.2) +
   theme_classic() +
   scale_x_continuous(n.breaks = 4) +
-  geom_vline(xintercept = hb.cutoff) +
+  geom_vline(xintercept = cutoff_hb) +
   #scale_color_manual(values = sample_colors) +
   #scale_fill_manual(values = sample_colors) +
   xlab("% Hemoglobin Genes") +
   ylab("Density")+ theme(legend.position="none") +
-  annotate("text", x = hb.cutoff, y = 0.1, label = paste("Max:", hb.cutoff), 
+  annotate("text", x = cutoff_hb, y = 0.1, label = paste("Max:", cutoff_hb), 
            angle = 0, vjust = -0.5, hjust = -0.1, size = 3)
 
 
@@ -314,12 +308,12 @@ den7 <- ggplot(dataObject@meta.data,
   geom_density(alpha = 0.2) +
   theme_classic() +
   scale_x_continuous(n.breaks = 4) +
-  geom_vline(xintercept = choroid.cutoff) +
+  geom_vline(xintercept = cutoff_choroid) +
   #scale_color_manual(values = sample_colors) +
   #scale_fill_manual(values = sample_colors) +
   xlab("% Choroid Marker Genes") +
   ylab("Density")+ theme(legend.position="none") +
-  annotate("text", x = choroid.cutoff, y = 0.1, label = paste("Max:", choroid.cutoff), 
+  annotate("text", x = cutoff_choroid, y = 0.1, label = paste("Max:", cutoff_choroid), 
            angle = 0, vjust = -0.5, hjust = -0.1, size = 3)
 
 # Arrange graphs in grid
@@ -330,9 +324,11 @@ grid1 <- grid.arrange(grobs = plots1, layout_matrix = layout1)
 
 ```{r}
 grid1 <- grid.arrange(grobs = plots1, layout_matrix = layout1)
-path <- paste0("../../results/density/",projectID,"_density_raw")
+path <- paste0("../../results/density/",project_ID,"_density_raw")
 saveToPDF(paste0(path, ".pdf"), width = 6, height = 10)
 dev.off()
+
+rm(grid1, plots1)
 ```
 
 ## Violin plots
@@ -362,13 +358,13 @@ v2
 ```{r, echo=FALSE}
 # save v1
 v1
-path <- paste0("../../results/violin/",projectID,"_nFeature_nCount_complexity_raw")
+path <- paste0("../../results/violin/",project_ID,"_nFeature_nCount_complexity_raw")
 saveToPDF(paste0(path, ".pdf"), width = 12, height = 9)
 dev.off()
 
 # save v2
 v2
-path <- paste0("../../results/violin/",projectID,"_percent_raw")
+path <- paste0("../../results/violin/",project_ID,"_percent_raw")
 saveToPDF(paste0(path, ".pdf"), width = 16, height = 7)
 dev.off()
 
@@ -390,7 +386,7 @@ s1 <- ggplot(
   geom_vline(xintercept = nCount.max) + 
   geom_hline(yintercept = nFeature.min) + 
   geom_hline(yintercept = nFeature.max) + 
-  facet_wrap(~Sample_ID, ncol = 8) +
+  facet_wrap(~Sample_ID, ncol = 7) +
   scale_colour_gradient(low = "gray90", high = "black", limits =c(0,100))
 s1
 ```
@@ -398,7 +394,7 @@ s1
 ```{r echo=FALSE}
 # save
 s1
-path <- paste0("../../results/scatter/",projectID,"_nFeature_vs_nCount_percentMt_raw")
+path <- paste0("../../results/scatter/",project_ID,"_nFeature_vs_nCount_percentMt_raw")
 saveToPDF(paste0(path, ".pdf"), width = 20, height = 15)
 dev.off()
 
@@ -419,7 +415,7 @@ s2
 ```{r,echo=FALSE}
 # save
 s2
-path <- paste0("../../results/scatter/",projectID,"_nCount_vs_percentMT_raw")
+path <- paste0("../../results/scatter/",project_ID,"_nCount_vs_percentMT_raw")
 saveToPDF(paste0(path, ".pdf"), width = 6, height = 4)
 
 # cleanup
@@ -456,31 +452,31 @@ message(paste0("Removed ", removed_count, " nuclei based on nFeature_RNA (new to
 
 # Filter 3: cell.complexity (assuming this metric is pre-calculated in your object)
 prev_nuclei <- ncol(filtered_data)
-filtered_data <- subset(filtered_data, subset = cell.complexity > complexity.cutoff)
+filtered_data <- subset(filtered_data, subset = cell.complexity > cutoff_complexity)
 removed_count <- prev_nuclei - ncol(filtered_data)
 message(paste0("Removed ", removed_count, " nuclei based on cell.complexity (new total: ", ncol(filtered_data), ")"))
 
 # Filter 4: percent.mt
 prev_nuclei <- ncol(filtered_data)
-filtered_data <- subset(filtered_data, subset = percent.mt <= mt.cutoff)
+filtered_data <- subset(filtered_data, subset = percent.mt <= cutoff_mt)
 removed_count <- prev_nuclei - ncol(filtered_data)
 message(paste0("Removed ", removed_count, " nuclei based on percent.mt (new total: ", ncol(filtered_data), ")"))
 
 # Filter 5: percent.hb
 prev_nuclei <- ncol(filtered_data)
-filtered_data <- subset(filtered_data, subset = percent.hb <= hb.cutoff)
+filtered_data <- subset(filtered_data, subset = percent.hb <= cutoff_hb)
 removed_count <- prev_nuclei - ncol(filtered_data)
 message(paste0("Removed ", removed_count, " nuclei based on percent.hb (new total: ", ncol(filtered_data), ")"))
 
 # Filter 6: percent.ribo
 prev_nuclei <- ncol(filtered_data)
-filtered_data <- subset(filtered_data, subset = percent.ribo <= ribo.cutoff)
+filtered_data <- subset(filtered_data, subset = percent.ribo <= cutoff_ribo)
 removed_count <- prev_nuclei - ncol(filtered_data)
 message(paste0("Removed ", removed_count, " nuclei based on percent.ribo (new total: ", ncol(filtered_data), ")"))
 
 # Filter 7: percent.choroid
 prev_nuclei <- ncol(filtered_data)
-filtered_data <- subset(filtered_data, subset = percent.choroid <= choroid.cutoff)
+filtered_data <- subset(filtered_data, subset = percent.choroid <= cutoff_choroid)
 removed_count <- prev_nuclei - ncol(filtered_data)
 message(paste0("Removed ", removed_count, " nuclei based on percent.choroid (new total: ", ncol(filtered_data), ")"))
 
@@ -507,11 +503,11 @@ dataObject.filtered <- subset(dataObject,
                           (nCount_RNA < nCount.max) & 
                           (nFeature_RNA > nFeature.min) & 
                           (nFeature_RNA < nFeature.max) & 
-                          (cell.complexity > complexity.cutoff) &
-                          (percent.mt <= mt.cutoff) & 
-                          (percent.hb <= hb.cutoff) &
-                          (percent.ribo <= ribo.cutoff) &
-                          (percent.choroid <= choroid.cutoff))
+                          (cell.complexity > cutoff_complexity) &
+                          (percent.mt <= cutoff_mt) & 
+                          (percent.hb <= cutoff_hb) &
+                          (percent.ribo <= cutoff_ribo) &
+                          (percent.choroid <= cutoff_choroid))
 
 # print nuclei removed
 print(paste0(dim(dataObject)[2] - dim(dataObject.filtered)[2]," nuclei removed"))
@@ -522,8 +518,8 @@ table(dataObject.filtered$Sample_ID)
 
 ## Save filtering
 ```{r,echo=FALSE}
-saveRDS(dataObject.filtered, paste0("../../rObjects/",projectID,"_filtered.rds"), compress = FALSE)
-#dataObject.filtered <- readRDS(paste0("../../rObjects/",projectID,"_filtered.rds"))
+saveRDS(dataObject.filtered, paste0("../../rObjects/",project_ID,"_filtered.rds"), compress = FALSE)
+#dataObject.filtered <- readRDS(paste0("../../rObjects/",project_ID,"_filtered.rds"))
 ```
 
 # Post-filtering
@@ -559,7 +555,7 @@ median(data$frequency)
 ```{r,echo=FALSE}
 # save
 grid2 <- grid.arrange(grobs = plots2, layout_matrix = layout2)
-path <- paste0("../../results/nuclei_count/",projectID, 
+path <- paste0("../../results/nuclei_count/",project_ID, 
                "_cells_per_sample")
 saveToPDF(paste0(path, ".pdf"), width = 12, height = 8)
 
@@ -623,8 +619,8 @@ den10 <- ggplot(dataObject.filtered@meta.data,
   #scale_fill_manual(values = sample_colors) +
   xlab("Cell Complexity (log10(nFeature/nCount))") +
   ylab("Density") +
-  geom_vline(xintercept = complexity.cutoff) + theme(legend.position="none")  +
-  annotate("text", x = complexity.cutoff, y = 0.1, label = paste("Min:", complexity.cutoff), 
+  geom_vline(xintercept = cutoff_complexity) + theme(legend.position="none")  +
+  annotate("text", x = cutoff_complexity, y = 0.1, label = paste("Min:", cutoff_complexity), 
            angle = 0, vjust = -0.5, hjust = -0.1, size = 3)
 
 # Visualize percent.mt
@@ -635,12 +631,12 @@ den11 <- ggplot(dataObject.filtered@meta.data,
   geom_density(alpha = 0.2) +
   theme_classic() +
   scale_x_continuous(n.breaks = 4) +
-  geom_vline(xintercept = mt.cutoff) +
+  geom_vline(xintercept = cutoff_mt) +
   #scale_color_manual(values = sample_colors) +
   #scale_fill_manual(values = sample_colors) +
   xlab("% Mitochondrial Genes") +
   ylab("Density")+ theme(legend.position="none")  +
-  annotate("text", x = mt.cutoff, y = 0.1, label = paste("Max:", mt.cutoff), 
+  annotate("text", x = cutoff_mt, y = 0.1, label = paste("Max:", cutoff_mt), 
            angle = 0, vjust = -0.5, hjust = -0.1, size = 3)
 
 
@@ -652,12 +648,12 @@ den12 <- ggplot(dataObject.filtered@meta.data,
   geom_density(alpha = 0.2) +
   theme_classic() +
   scale_x_continuous(n.breaks = 4) +
-  geom_vline(xintercept = ribo.cutoff) +
+  geom_vline(xintercept = cutoff_ribo) +
   #scale_color_manual(values = sample_colors) +
   #scale_fill_manual(values = sample_colors) +
   xlab("% Ribosomal Genes") +
   ylab("Density")+ theme(legend.position="none")  +
-  annotate("text", x = ribo.cutoff, y = 0.1, label = paste("Max:", ribo.cutoff), 
+  annotate("text", x = cutoff_ribo, y = 0.1, label = paste("Max:", cutoff_ribo), 
            angle = 0, vjust = -0.5, hjust = -0.1, size = 3)
 
 
@@ -669,12 +665,12 @@ den13 <- ggplot(dataObject.filtered@meta.data,
   geom_density(alpha = 0.2) +
   theme_classic() +
   scale_x_continuous(n.breaks = 4) +
-  geom_vline(xintercept = hb.cutoff) +
+  geom_vline(xintercept = cutoff_hb) +
   #scale_color_manual(values = sample_colors) +
   #scale_fill_manual(values = sample_colors) +
   xlab("% Hemoglobin Genes") +
   ylab("Density")+ theme(legend.position="none") +
-  annotate("text", x = hb.cutoff, y = 0.1, label = paste("Max:", hb.cutoff), 
+  annotate("text", x = cutoff_hb, y = 0.1, label = paste("Max:", cutoff_hb), 
            angle = 0, vjust = -0.5, hjust = -0.1, size = 3)
 
 
@@ -685,12 +681,12 @@ den14 <- ggplot(dataObject.filtered@meta.data,
   geom_density(alpha = 0.2) +
   theme_classic() +
   scale_x_continuous(n.breaks = 4) +
-  geom_vline(xintercept = choroid.cutoff) +
+  geom_vline(xintercept = cutoff_choroid) +
   #scale_color_manual(values = sample_colors) +
   #scale_fill_manual(values = sample_colors) +
   xlab("% Choroid Marker Genes") +
   ylab("Density")+ theme(legend.position="none") +
-  annotate("text", x = choroid.cutoff, y = 0.1, label = paste("Max:", choroid.cutoff), 
+  annotate("text", x = cutoff_choroid, y = 0.1, label = paste("Max:", cutoff_choroid), 
            angle = 0, vjust = -0.5, hjust = -0.1, size = 3)
 
 # Arrange graphs in grid
@@ -702,7 +698,7 @@ grid3 <- grid.arrange(grobs = plots3, layout_matrix = layout3)
 ```{r, echo=FALSE}
 # save
 grid3 <- grid.arrange(grobs = plots3, layout_matrix = layout3)
-path <- paste0("../../results/density/",projectID, 
+path <- paste0("../../results/density/",project_ID, 
                "_density_filtered")
 saveToPDF(paste0(path, ".pdf"), width = 10, height = 10)
 
@@ -734,12 +730,12 @@ v4
 ```{r, echo=FALSE}
 # save
 v3
-path <- paste0("../../results/violin/",projectID, 
+path <- paste0("../../results/violin/",project_ID, 
                "_nFeature_nCount_complexity_filtered")
 saveToPDF(paste0(path, ".pdf"), width = 12, height = 11)
 
 v4
-path <- paste0("../../results/violin/",projectID, 
+path <- paste0("../../results/violin/",project_ID, 
                "_percent_filtered")
 saveToPDF(paste0(path, ".pdf"), width = 14, height = 9)
 
@@ -769,7 +765,7 @@ s3
 ```{r,echo=FALSE}
 # save
 s3
-path <- paste0("../../results/scatter/",projectID,
+path <- paste0("../../results/scatter/",project_ID,
                "_nFeature_vs_nCount_perecentMt_filtered")
 saveToPDF(paste0(path, ".pdf"), width = 20, height = 15)
 
@@ -790,7 +786,7 @@ s4
 ```{r,echo=FALSE}
 # save
 s4
-path <- paste0("../../results/scatter/",projectID,
+path <- paste0("../../results/scatter/",project_ID,
                "_nCount_vs_percentMT_filtered")
 saveToPDF(paste0(path, ".pdf"), width = 6, height = 4)
 
@@ -820,7 +816,7 @@ b1
 ```{r,echo=FALSE}
 # save
 b1
-path <- paste0("../../results/nuclei_count/",projectID,
+path <- paste0("../../results/nuclei_count/",project_ID,
                "_nFeature_per_sample")
 saveToPDF(paste0(path, ".pdf"), width = 12, height = 4)
 
@@ -838,7 +834,7 @@ head(df, 10)
 ```
 
 ```{r,echo=FALSE}
-write.table(df, paste0("../../results/top_transcripts/", projectID, "_abundant_transcripts.txt"),
+write.table(df, paste0("../../results/top_transcripts/", project_ID, "_abundant_transcripts.txt"),
             quote = FALSE,
             row.names = FALSE)
 ```

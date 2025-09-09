@@ -15,19 +15,19 @@ dataObject # inspect
 metadata <- subset(metadata, Sample_ID != "LBD_AS_F4")
 metadata$sampleID <- factor(metadata$Sample_ID, levels = c(metadata$Sample_ID))
 samples <- metadata$sampleID 
-sex_order <- factor(metadata$sex_inferred, levels = unique(metadata$sex_inferred))
-disease_order <- factor(metadata$TYPE, levels = c("CONTROL", "AD_AT", "LBD_S", "LBD_AS", "LBD_ATS"))
+order_sex <- factor(metadata$sex_inferred, levels = unique(metadata$sex_inferred))
+order_disease <- factor(metadata$TYPE, levels = c("CONTROL", "AD_AT", "LBD_S", "LBD_AS", "LBD_ATS"))
 
 metadata <- metadata %>%
   mutate(sampleID = gsub(".*_(\\d+)_.*_(BR_Nuclei).*", "\\2_\\1", Lane.Name))
 samples <- metadata$sampleID 
 
-# sampleID with disease_order
+# sampleID with order_disease
 order <- metadata %>%
-  arrange(disease_order) %>%
+  arrange(order_disease) %>%
   dplyr::select(TYPE, sampleID, Sample_ID)
 samples <- order$sampleID
-disease_order <- order$TYPE
+order_disease <- order$TYPE
 sample_order <- factor(order$Sample_ID, levels = order$Sample_ID)
 
 seurat_sample_order <- as.character(dataObject$sample)

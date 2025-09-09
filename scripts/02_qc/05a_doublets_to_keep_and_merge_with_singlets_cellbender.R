@@ -9,7 +9,7 @@ color.panel <- dittoColors()
 
 ## ----read_object--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 # read object
-dataObject.doublets <- readRDS(file = paste0("../rObjects/", projectID, "_unannotated_harmony_int_doublets_only.rds"))
+dataObject.doublets <- readRDS(file = paste0("../rObjects/", projectID, "_doublets_harmony_azimuth.rds"))
 dataObject.singlets <- readRDS(file = paste0("../rObjects/", projectID, "_singlets.rds"))
 
 ## ----doublets_to_keep--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

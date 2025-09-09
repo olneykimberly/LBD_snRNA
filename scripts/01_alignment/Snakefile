@@ -13,13 +13,13 @@ rule all:
         expand(
             "{fastq_path}{seq_order}_L003_I1_001.fastq.gz",
             fastq_path=config["fastq_path"],
-            seq_order=[config[sample]["fq"] for sample in config["sample_names"]]
+            seq_order=[config[sample]["SEQ"] for sample in config["sample_names"]]
         ),
         expand("{sample}/outs", sample=config["sample_names"]),
         expand(config["cellranger_dir"]+"{sample}/", sample=config["sample_names"]),
-        expand(config["cellranger_dir"]+"web_summaries/{sample}_web_summary.html", sample=config["sample_names"]),
-        expand(config["cellbender_dir"]+"{sample}/{sample}_filtered.h5", sample=config["sample_names"]),
-        expand(config["cellbender_dir"]+"{sample}/{sample}_filtered_seurat.h5", sample=config["sample_names"])
+        expand(config["cellranger_dir"]+"web_summaries/{sample}_web_summary.html", sample=config["sample_names"])
+        #expand(config["cellbender_dir"]+"{sample}/{sample}_filtered.h5", sample=config["sample_names"]),
+        #expand(config["cellbender_dir"]+"{sample}/{sample}_filtered_seurat.h5", sample=config["sample_names"])
 
 #------------------------------
 # alignment

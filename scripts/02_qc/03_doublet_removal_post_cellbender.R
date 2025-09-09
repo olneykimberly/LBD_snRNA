@@ -193,8 +193,7 @@ dataObject.singlets <- merge(x = dataObject.split[[1]],
                                    dataObject.split[[17]], dataObject.split[[18]], dataObject.split[[19]], dataObject.split[[20]], dataObject.split[[21]], 
                                    dataObject.split[[22]], dataObject.split[[23]], dataObject.split[[24]], dataObject.split[[25]], dataObject.split[[26]],
                                    dataObject.split[[27]], dataObject.split[[28]], dataObject.split[[29]], dataObject.split[[30]], dataObject.split[[31]],
-                                   dataObject.split[[32]], dataObject.split[[33]], dataObject.split[[34]], dataObject.split[[35]], dataObject.split[[36]],
-                                   dataObject.split[[37]], dataObject.split[[38]], dataObject.split[[39]]),
+                                   dataObject.split[[32]], dataObject.split[[33]], dataObject.split[[34]], dataObject.split[[35]]),
                              project = paste0("cwow"))
 
 # print how many cells removed
@@ -207,8 +206,7 @@ dataObject.doublets <- merge(x = dataObject.split.doublets[[1]],
                                    dataObject.split.doublets[[17]], dataObject.split.doublets[[18]], dataObject.split.doublets[[19]], dataObject.split.doublets[[20]], dataObject.split.doublets[[21]], 
                                    dataObject.split.doublets[[22]], dataObject.split.doublets[[23]], dataObject.split.doublets[[24]], dataObject.split.doublets[[25]], dataObject.split.doublets[[26]],
                                    dataObject.split.doublets[[27]], dataObject.split.doublets[[28]], dataObject.split.doublets[[29]], dataObject.split.doublets[[30]], dataObject.split.doublets[[31]],
-                                   dataObject.split.doublets[[32]], dataObject.split.doublets[[33]], dataObject.split.doublets[[34]], dataObject.split.doublets[[35]], dataObject.split.doublets[[36]],
-                                   dataObject.split.doublets[[37]], dataObject.split.doublets[[38]], dataObject.split.doublets[[39]]),
+                                   dataObject.split.doublets[[32]], dataObject.split.doublets[[33]], dataObject.split.doublets[[34]], dataObject.split.doublets[[35]]),
                              project = paste0("cwow"))
 # confirm number 
 print(paste0(dim(dataObject.doublets)[2]," total doublets"))
