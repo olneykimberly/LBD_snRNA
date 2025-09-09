@@ -1,33 +1,33 @@
 # LBD_snRNA
 Lewy Body Dementia Center With Out Walls (LBD CWOW) single nucleus RNAseq processing and analysis.
-Anterior cingulate cortex tissue samples from the Mayo Clinic brain bank were collected for 619 individuals. This single nucleus RNAseq data set is for a subset of those samples; n=40. However, one sample needed to be removed as post QC only 511 nuclei remained.  
+Anterior cingulate cortex tissue samples from the Mayo Clinic brain bank were collected for 619 individuals. This single nucleus RNAseq data set is for a subset of those samples; n=35. 
 Raw fastq files are available on SRA, PRJNA1023207.
 
 5 per sex per disease type. 
 
-| Disease                   | Count   |
-| ------------------------- |:-------:|
-| Control                     | 7    |
-| Alzheimer’s disease (AD)    | 8    |
-| Lewy body disease (LBD(S))  | 7    |
-| Lewy body disease (LBD(AS)) | 7    |
-| Lewy body disease (LBD(ATS))| 6    |
+| Disease                   | Count   | Sex (F, M)|
+| ------------------------- |:-------:|:-------:|
+| Control                     | 7    | (3,4)   |
+| Alzheimer’s disease (AD)    | 8    | (4,4)   |
+| Lewy body disease (LBD(S))  | 7    | (3,4)   |
+| Lewy body disease (LBD(AS)) | 7    | (3,4)   |
+| Lewy body disease (LBD(ATS))| 6    | (2,4)   |
 
 This git repo contains scripts for the following:
 -   Metadata analysis
 -   Per processing of single nucleus RNA-sequencing data
 -   Analysis of single nucleus RNA-sequencing data 
--   Generation of manuscript figures from Olney et al. 2025 publication 
--   Generation of shiny app for exploration of the results presented in Olney et al. 2025 publication, view app [here](https://fryerlab.shinyapps.io/lbd_cwow_snrna/)
+-   Generation of manuscript figures from Olney & Rabichow et al. 2025 publication 
+-   Generation of shiny app for exploration of the results presented in Olney & Rabichow et al. 2025 publication, view app [here](https://fryerlab.shinyapps.io/lbd_cwow_snrna/)
 
 
 *Characterize cell-type transcriptional alterations across neuropathologies:* Dementia pathologies elicit pronounced transcriptional responses in multiple cell types, including damaged and dying neurons, disease-associated microglia (DAM), and reactive disease-associated astrocytes (DAA). In Lewy body disease (LBD), increased SNCA (α-synuclein) expression leads to Lewy bodies' formation, particularly affecting dopaminergic neurons. In Alzheimer's disease (AD), elevated expression of amyloid precursor protein (APP) produces amyloid-β, a key component of amyloid plaques.The transcription patterns of cell types in cases with a combination of Aβ plaques, NFTs, and α-synuclein inclusions are not well understood. Moreover, studies have shown female-specific upregulation of DAM genes attributed to sex differences in microglial responses in AD cases. This project addresses two aims using human single nuclues RNAseq data: 
 
-Aim 1.1 generates and characterizes snRNAseq data (5 per sex per neuropathology; n=40) to test the hypothesis that each neuropathological defined disease exhibits distinct cell-type transcriptional dysregulation.
+Aim 1 generates and characterizes snRNAseq data (~4 per sex per neuropathology; n=35) to test the hypothesis that each neuropathological defined disease exhibits distinct cell-type transcriptional dysregulation.
 
-Aim 1.2 will examine transcriptional sex differences among cell types, testing the hypothesis that XX females display more pronounced upregulation of DAM and DAA genes than XY males with similar neuropathological burdens.
+Aim 2 examines transcriptional sex differences among cell types, testing the hypothesis that XX females display more pronounced upregulation of DAM and DAA genes than XY males with similar neuropathological burdens.
 
-Explore genes among the human brain samples in our published [shiny app](https://fryerlab.shinyapps.io/lbd_cwow_snrna/)
+Explore bulk-level gene differential expression among the human brain samples in our published [shiny app](https://fryerlab.shinyapps.io/lbd_cwow_snrna/)
 
 
 ## Set up conda environment
@@ -47,7 +47,7 @@ conda env create -n LBD_sn --file LBD_sn.yml
 ```
 The LBD_sn conda environment contains cellbender.  [cellbender_docs](https://cellbender.readthedocs.io/en/latest/installation/index.html)
 
-Additionally, the workflow uses cellranger, which need to be installed separately.
+Additionally, the workflow uses cellranger, which needs to be installed separately.
 1. Install cellranger 9.0.0\
 Requires going to the 10X website and filling in information to get to the download page.
 ```
@@ -59,7 +59,7 @@ wget -O cellranger-9.0.0.tar.gz "[cellranger_link](https://cf.10xgenomics.com/re
 wget "https://cf.10xgenomics.com/supp/cell-exp/refdata-gex-GRCh38-2024-A.tar.gz"
 ```
 
-## File set up
+## File name set up
 Samples were sequenced at The Translational Genomics Research Institute (TGen) in Phoenix, Arizona. Files were named like so:
 MAYO_0407_1_BR_Nuclei_C1_X3SC3_A16845_22KJLTLT4_AGCAAGAAGC_L007_R1_001.fastq.gz\
 [0] study; [1] patient; [2] visit (1 for frozen banked samples); [3] source (2 letter code; BR = brain); [4] fraction (Nuclie or whole); [5] subgroup - C1 is control as they don't know the disease status; [6] assay; [7] library (1 letter and 5 numbers); [8] sequence order - was [8:9] barcode; [9] lane; [10] strand or index
@@ -86,7 +86,7 @@ sh rename_fastqs.sh
 ```
 
 ## Snakemake for data alignment and removal/correction of ambeint RNA
-1. Get read group info
+1. Obtain read group info from the fastq files.\
 To obtain sample information, run the get_readgroup_info script. This script is located in the scripts preprocessing folder. 
 ```
 sh get_readgroup_info.sh
@@ -106,13 +106,14 @@ sbatch run_snakemake.sh
 Post alignment will include both cellranger and cellbender outputs. 
 
 ## Set up R environment
-The next steps in the workflow uses R. The R environment has been preserved using renv. [renv_docs](https://rstudio.github.io/renv/articles/renv.html)
+The next steps in the workflow uses R. The R environment has been preserved using renv:  [renv_docs](https://rstudio.github.io/renv/articles/renv.html)
 When cloning this git repo, renv should automatically activate. If not, you can manually call renv::activate().
-You can then run renv::restore(). This command reads the renv.lock file and installs the exact versions of the R packages specified in the lockfile into your own private project library, ensuring a consistent environment across all collaborators.
+You can then run renv::restore(). This command reads the renv.lock file and installs the exact versions of the R packages specified in the lockfile into your own private project library, ensuring a consistent environment.
 
 ## Quality control 
-The scripts for QC are in the 02_qc scripts folder. 
-1. Create cellranger seurat object 
+The scripts for QC are in the scripts/02_qc/directory. 
+
+1. Create Seurat object. **Note that this workflow uses Seurat v5.  
 ```
 # cd scripts/02_qc/
 01_create_seurat_object_cellranger.R # output is robject CWOW_cellbender.rds
@@ -120,26 +121,38 @@ The scripts for QC are in the 02_qc scripts folder.
 
 2. Quality filtering such as min and max nCount, nFeature, and percent MT
 ```
-02a_quality_control_post_cellranger.Rmd # output is robject CWOW_cellbender_filtered.rds & various QC plots
-02b_sex_check_cellbender.Rmd # output violin plot of XIST and UTY expression to confirm the sex of the samples
+02a_quality_control_post_cellranger.Rmd 
+# output is robject CWOW_cellbender_filtered.rds & various QC plots
+
+02b_sex_check_cellbender.Rmd 
+# output violin plot of XIST and UTY expression to confirm the sex of the samples
 ```
 
-3 - 5. Doublet finder, doublet exploration, and identifying potential "doublets" to keep. 
+3 - 5. Doublet finder, doublet exploration, and identifying potential doublets to keep. 
 ```
-03_doublet_removal_post_cellbender.R # output is two robjects 1) singlets only CWOW_cellbender_singlets.rds and 2) doublets only CWOW_cellbender_doublets.rds
+03_doublet_removal_post_cellbender.R 
+# output is two robjects:
+# 1) singlets only CWOW_cellbender_singlets.rds  
+# 2) doublets only CWOW_cellbender_doublets.rds
 
 # 04 explore just the doublets to determine if they are truly doublets
-# doublets will be intergrated with harmony, and annotated via AZIMUTH. 
-04_explore_doublets_cellbender.R # output is various plots to assess the doublets and CWOW_cellbender_doublets_harmony_azimuth.rds object
+# doublets will be intergrated via harmony, and annotated via AZIMUTH
+04_explore_doublets_cellbender.R 
+# output is various plots to assess the doublets and CWOW_cellbender_doublets_harmony_azimuth.rds object
 
-# 05 merges the doublets to keep with the singlets. ** MUST update line 23 of the subset for doublet clusters to be removed 
-05a_doublets_to_keep_and_merge_with_singlets_cellbender.R # output is CWOW_cellbender_mereged_singlets_with_kept_doublets.rds
+# 05 merges the doublets to keep with the singlets 
+# ** MUST update line 23 of the subset for doublet clusters to be removed
+05a_doublets_to_keep_and_merge_with_singlets_cellbender.R 
+# output is CWOW_cellbender_mereged_singlets_with_kept_doublets.rds
+
+
 # recaluculate qc metrics for percentage of mt, ribo, hb, choroid, ect. 
-05b_explore_doublets_and_singlets_cellbender.R # output is various qc plots 
+05b_explore_doublets_and_singlets_cellbender.R 
+# output is various qc plots 
 ```
 
 ## Find markers and annotation
-The scripts for find markers and annotation are in the 03_markers_and_annotation folder
+The scripts for find markers and annotation are in the 03_markers_and_annotation folder. First the data will be explored to determine if integration is needed, and then integrated via rpca. Post integration, a pass1 of findmarkers and cluster annotation is manually determined. Then each identified cell type will be re-clustered. This is done to determine that the nuclei within that cell type are indeed of that cell type or potentially contaminated nuclei that should be removed. Once the "clean" nuclei are identified for each cell type, all the cell types are merged back together and the Seurat object is re-processed to determine cluster markers and then pass2 manual annotations are completed. The "dirty" nuclei will also be merged and re-processed to ensure that these are indeed uninformative nuclei that should be removed so as not to contaminate the biological signal. 
 
 1 - 2. Determine if data needs to be integrated and prepare data for integration
 ```
