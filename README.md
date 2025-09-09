@@ -159,31 +159,40 @@ The scripts for find markers and annotation are in the 03_markers_and_annotation
 # cd scripts/03_markers_and_annotation/
 
 # Assess the data without integration 
-01_no_integration_assessment_cellbender.R # output plots named "CWOW_cellbender_joinlayers_azimuth", additionally, rObject CWOW_cellbender_joinlayers_azimuth.rds
+01_no_integration_assessment_cellbender.R 
+# output plots named "CWOW_cellbender_joinlayers_azimuth"
+# output rObject CWOW_cellbender_joinlayers_azimuth.rds
 
 # Input for the 02 script is the rObject CWOW_cellbender_joinlayers_azimuth.rds obtained for script 01
 # split the object by sample and run SCTransform
 # SCTransform replaces NormalizeData(), ScaleData(), and FindVariableFeatures()
 # after SCTransform, the script will run PCA, UMAP, FindNeighbors, FindClusters
-02_preprocess_for_integration_split_SCTransform_cellbender.R # output is two rObjects SCTransform_only before UMAP and Find nieghbors and clusters, and after CWOW_cellbender_SCTransform.rds
+02_preprocess_for_integration_split_SCTransform_cellbender.R 
+# Output is two rObjects:
+# 1) SCTransform_only before UMAP and Find nieghbors and clusters
+# 2) CWOW_cellbender_SCTransform.rds with Find nieghbors and clusters, and UMAP
 ```
 
 3. Data will be integrated using the rpca approach. 
 Robust Principal Component Analysis (RPCA). Instead of standard PCA within the CCA framework, RPCA is designed to be more robust to outliers and noise in the data. This can be particularly beneficial when dealing with highly heterogeneous datasets or those with significant technical artifacts.
 ```
-03_integration_rpca.R # output is CWOW_cellbender_RPCAIntegration.rds object. **note the umap is integrated.rpca
+03_integration_rpca.R 
+# output is CWOW_cellbender_RPCAIntegration.rds object. 
+# **Note the umap is named integrated.rpca
 ```
 
 4. Find markers
 ```
-04_find_markers_pass1_rpca.R # output is two rds objects 
+04_find_markers_pass1_rpca.R 
+# Output is two rds objects:
 # 1) all makers CWOW_cellbender_RPCAIntegration_markers.rds and 
 # 2) CWOW_cellbender_RPCAIntegration_markers_log2FC1_q0.01.rds which is markers with log2FC > 1 & q-value < 0.01
 ```
 
 5. Pass 1 annotations 
 ```
-05_annotations_pass1_rpca.Rmd # output CWOW_cellbender_RPCAIntegration_annotated_before_recluster.rds
+05_annotations_pass1_rpca.Rmd 
+# output CWOW_cellbender_RPCAIntegration_annotated_before_recluster.rds
 ```
 
 6. Recluster each cell type
@@ -228,3 +237,10 @@ Robust Principal Component Analysis (RPCA). Instead of standard PCA within the C
 ```
 01_make_shiny.R
 ```
+
+## Contacts
+
+| Contact | Email |
+| --- | --- |
+| Kimberly Olney, PhD | kolney@tgen.org |
+| John Fryer, PhD | jfryer@tgen.org |
