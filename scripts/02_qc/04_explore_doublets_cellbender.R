@@ -61,7 +61,7 @@ ditto_umap
 
 pdf(
   paste0(
-    "../results/UMAP/doublets/",
+    "../results/UMAP/",
     projectID,
     "_doublets_only.pdf"
   ),
@@ -72,7 +72,7 @@ ditto_umap
 dev.off()
 
 dot_ind <- DotPlot(dataObject.integrated,
-                   features = markers.to.plot, 
+                   features = genes_markers, 
                    cluster.idents = TRUE,
                    dot.scale = 8) + RotatedAxis()
 dot_ind

@@ -15,11 +15,10 @@ rule all:
             fastq_path=config["fastq_path"],
             seq_order=[config[sample]["SEQ"] for sample in config["sample_names"]]
         ),
-        expand("{sample}/outs", sample=config["sample_names"]),
-        expand(config["cellranger_dir"]+"{sample}/", sample=config["sample_names"]),
-        expand(config["cellranger_dir"]+"web_summaries/{sample}_web_summary.html", sample=config["sample_names"])
-        #expand(config["cellbender_dir"]+"{sample}/{sample}_filtered.h5", sample=config["sample_names"]),
-        #expand(config["cellbender_dir"]+"{sample}/{sample}_filtered_seurat.h5", sample=config["sample_names"])
+        [directory(f"../../cellranger/{sample}/") for sample in config["sample_names"]],
+        expand("../../cellranger/web_summaries/{sample}_web_summary.html", sample=config["sample_names"]),
+        expand("../../cellbender/{sample}/{sample}_filtered.h5", sample=config["sample_names"]),
+        expand("../../cellbender/{sample}/{sample}_filtered_seurat.h5", sample=config["sample_names"])
 
 #------------------------------
 # alignment
@@ -46,38 +45,20 @@ rule cellranger:
 # --localmem will restrict cellranger to 50G memory
 
 #------------------------------
-# move websummaries to a folder 
-#------------------------------
-rule move:
-    output:
-        outs_dir = directory(config["cellranger_dir"]+"{sample}/"),
-        web_cp = config["cellranger_dir"]+"web_summaries/{sample}_web_summary.html"
-    params:
-        id = lambda wildcards: config[wildcards.sample]["ID"]
-    shell:
-        """
-        mkdir {output.outs_dir}
-        mv {params.id}/* {output.outs_dir}
-        mv {params.id}/outs {output.outs_dir}
-        cp {output.outs_dir}outs/web_summary.html {output.web_cp}
-        """
-
-#------------------------------
 # remove ambient cells
 #------------------------------
 rule cellbender:
         input:
-            h5 = (config["cellranger_dir"]+"{sample}/outs/raw_feature_bc_matrix.h5")
+            h5 = "../../cellranger/{sample}/outs/raw_feature_bc_matrix.h5"
         output:
-            benderh5 = (config["cellbender_dir"]+"{sample}/{sample}_filtered.h5"),
-            dir = (directory("{sample}/")),
+            benderh5 = "../../cellbender/{sample}/{sample}_filtered.h5"
         params:
             id = lambda wildcards: config[wildcards.sample]["ID"],
         shell:
             """
-	          cd /tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/cellbender;
-	          cd {output.dir};
-            cellbender remove-background --input ../{input.h5} --output {params.id} --checkpoint ckpt.tar.gz
+            mkdir -p ../../cellbender/{wildcards.sample}
+            cd ../../cellbender/{wildcards.sample}
+            cellbender remove-background --input {input.h5} --output {params.id} --cuda
             """
 
 # https://cellbender.readthedocs.io/en/latest/usage/index.html            

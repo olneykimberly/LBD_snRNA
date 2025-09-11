@@ -64,6 +64,9 @@ library(ggpubr)
 library(patchwork) # For combining plots
 library(SeuratData)
 library(batchelor)
+library(DropletQC)
+library(Rsamtools)
+library(GenomicRanges)
 
 #options(future.globals.maxSize = 1e9)
 options(future.globals.maxSize = 150 * 1024^3)

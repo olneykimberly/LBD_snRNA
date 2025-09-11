@@ -15,12 +15,12 @@ setwd("/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/scripts/")
 
 ## ----source------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 source(here::here("/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/scripts/", "file_paths_and_colours.R"))
-projectID <- "CWOW_cellbender"
-color.panel <- dittoColors()
+project_ID <- "CWOW_cellbender"
+color_panel <- dittoColors()
 
 ## ----read_object--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 # read object
-dataObject <- readRDS(file = paste0("../rObjects/", projectID, "_SCTransform.rds"))
+dataObject <- readRDS(file = paste0("../rObjects/", project_ID, "_SCTransform.rds"))
 dataObject # inspect
 
 ## ----Perform_integration----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -36,7 +36,7 @@ dataObject # inspect
 print("RPCAIntegration")
 dataObject <- RunPCA(dataObject, npcs = 30, verbose = F)
 features <- dataObject@assays$SCT@var.features
-write.table(features, paste0("../results/integration_exploration/",projectID,"_SCT_variable_features.txt"), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(features, paste0("../results/",project_ID,"_SCT_variable_features.txt"), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ## add assay name 
 dataObject <- IntegrateLayers(object = dataObject, orig.reduction = "pca", method = RPCAIntegration, normalization.method = "SCT", verbose = F, new.reduction = "integrated.rpca")
@@ -44,68 +44,72 @@ dataObject <- FindNeighbors(dataObject, reduction = "integrated.rpca", dims = 1:
 dataObject <- FindClusters(dataObject, resolution = 0.6, cluster.name = "rpca_clusters")
 dataObject <- RunUMAP(dataObject, dims = 1:30, reduction = "integrated.rpca", reduction.name = "integrated.rpca")
 
-projectID <- "CWOW_cellbender_RPCAIntegration"
+project_ID <- "CWOW_cellbender_RPCAIntegration"
 
-pdf(paste0("../results/integration_exploration/",projectID,"_UMAP_annotations_and_group.pdf"), width = 14, height = 7)
-DimPlot(dataObject, reduction = "integrated.rpca", group.by = c("group", "predicted.subclass")) # disease and azimuth annotations
-dev.off()
+## ----save_object,echo=FALSE,eval=TRUE-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+saveRDS(dataObject, paste0("../rObjects/",project_ID,".rds"), compress = FALSE)
+## -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-ditto_umap <- dittoDimPlot(object = dataObject, var = "predicted.subclass", reduction.use = "integrated.rpca", do.label = TRUE, labels.highlight = TRUE)
-pdf(paste0("../results/integration_exploration/",projectID,"_UMAP_annotations.pdf"), width = 8, height = 7)
-ditto_umap
-dev.off()
+# pdf(paste0("../results/UMAP/",project_ID,"_UMAP_annotations_and_group.pdf"), width = 14, height = 7)
+# DimPlot(dataObject, reduction = "integrated.rpca", group.by = c("group", "predicted.subclass")) # disease and azimuth annotations
+# dev.off()
+# 
+# ditto_umap <- dittoDimPlot(object = dataObject, var = "predicted.subclass", reduction.use = "integrated.rpca", do.label = TRUE, labels.highlight = TRUE)
+# pdf(paste0("../results/UMAP/",project_ID,"_UMAP_annotations.pdf"), width = 8, height = 7)
+# ditto_umap
+# dev.off()
 
 # doublet status
-UMAP_doublets <- DimPlot(dataObject, reduction = "integrated.rpca", group.by = c("CellTypes_DF"), cols=c("black", "#66C2A5"))
-pdf(paste0("../results/integration_exploration/",projectID,"_UMAP_doubletStatus.pdf"), width = 8, height = 7)
-UMAP_doublets
-dev.off()
+#UMAP_doublets <- DimPlot(dataObject, reduction = "integrated.rpca", group.by = c("CellTypes_DF"), cols=c("black", "#66C2A5"))
+#pdf(paste0("../results/UMAP/",project_ID,"_UMAP_doubletStatus.pdf"), width = 8, height = 7)
+#UMAP_doublets
+#dev.off()
 
 # feature plot 
 UMAP_feature <- FeaturePlot(dataObject,  reduction = "integrated.rpca", features = c("AQP4", "PLP1", "RBFOX3", "GAD1"))
-pdf(paste0("../results/integration_exploration/",projectID, "_UMAP_feature_celltype_markers.pdf"), width = 12, height = 9)
+pdf(paste0("../results/UMAP/",project_ID, "_UMAP_feature_celltype_markers.pdf"), width = 12, height = 9)
 UMAP_feature
 dev.off()
 
 # sample
 UMAP_sample <- DimPlot(dataObject, reduction = "integrated.rpca", group.by = c("Sample_ID"))
-pdf(paste0("../results/integration_exploration/",projectID,"_UMAP_sample.pdf"), width = 9, height = 7)
+pdf(paste0("../results/UMAP/",project_ID,"_UMAP_sample.pdf"), width = 9, height = 7)
 UMAP_sample
 dev.off()
 
 # group
 UMAP_group <- DimPlot(dataObject, reduction = "integrated.rpca", group.by = c("group"))
-pdf(paste0("../results/integration_exploration/",projectID,"_UMAP_group.pdf"), width = 9, height = 7)
+pdf(paste0("../results/UMAP/",project_ID,"_UMAP_group.pdf"), width = 9, height = 7)
 UMAP_group
 dev.off()
 
 # violin features predicted.subclass
-v1 <- VlnPlot(dataObject, features = c("AQP4", "PLP1", "FLT1", "P2RY12","RBFOX1", "GAD1"), pt.size = 0.01, stack = TRUE, flip = TRUE,
-              group.by = "predicted.subclass") + NoLegend() + ggtitle(paste0(projectID))
-pdf(paste0("../results/integration_exploration/", projectID,"_violin_celltype_markers_azimuth.pdf"),width = 12,height = 8)
-v1
-dev.off()
+# v1 <- VlnPlot(dataObject, features = c("AQP4", "PLP1", "FLT1", "P2RY12","RBFOX1", "GAD1"), pt.size = 0.01, stack = TRUE, flip = TRUE,
+#               group.by = "predicted.subclass") + NoLegend() + ggtitle(paste0(project_ID))
+# pdf(paste0("../results/violin/", project_ID,"_violin_celltype_markers_azimuth.pdf"),width = 12,height = 8)
+# v1
+# dev.off()
 
 # violin features clusters
 v1 <- VlnPlot(dataObject, features = c("AQP4", "PLP1", "FLT1", "P2RY12","RBFOX1", "GAD1"), pt.size = 0.01, stack = TRUE, flip = TRUE,
-              group.by = "rpca_clusters") + NoLegend() + ggtitle(paste0(projectID))
-pdf(paste0("../results/integration_exploration/", projectID,"_violin_celltype_markers_by_cluster.pdf"),width = 12,height = 8)
+              group.by = "rpca_clusters") + NoLegend() + ggtitle(paste0(project_ID))
+pdf(paste0("../results/violin/", project_ID,"_violin_celltype_markers_by_cluster.pdf"),width = 12,height = 8)
 v1
 dev.off()
 
 # DotPlot clusters
 Idents(dataObject) <- dataObject$rpca_clusters
-dot_clusters <- DotPlot(dataObject, features = markers.to.plot, cluster.idents = TRUE)+ RotatedAxis()
-pdf(paste0("../results/integration_exploration/", projectID,"_DotPlot_clusters.pdf"),width = 12,height = 15)
+dot_clusters <- DotPlot(dataObject, features = genes_markers, cluster.idents = TRUE)+ RotatedAxis()
+pdf(paste0("../results/dot_plot/", project_ID,"_DotPlot_clusters.pdf"),width = 12,height = 15)
 dot_clusters
 dev.off()
 
-Idents(dataObject) <- dataObject$predicted.subclass
-# DotPlot annotations
-dot_anno <- DotPlot(dataObject, features = markers.to.plot, cluster.idents = TRUE)+ RotatedAxis()
-pdf(paste0("../results/integration_exploration/", projectID,"_DotPlot_annotations.pdf"),width = 12,height = 6)
-dot_anno
-dev.off()
+# Idents(dataObject) <- dataObject$predicted.subclass
+# # DotPlot annotations
+# dot_anno <- DotPlot(dataObject, features = genes_markers, cluster.idents = TRUE)+ RotatedAxis()
+# pdf(paste0("../results/dot_plot/", project_ID,"_DotPlot_annotations.pdf"),width = 12,height = 6)
+# dot_anno
+# dev.off()
 
 # Nuclei count per cluster
 count_per_cluster <- FetchData(dataObject, vars = c("group", "rpca_clusters")) %>%
@@ -125,12 +129,12 @@ count_bar <- ggplot(count_melt, aes(x = factor(group), y = `number of nuclei`, f
     width = 1,
     position = position_dodge(width = 0.8)
   ) +
-  theme_classic() + scale_fill_manual(values = color.panel) +
+  theme_classic() + scale_fill_manual(values = color_panel) +
   ggtitle("Number of nuclei per cluster and group") +  xlab("cluster") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   scale_y_continuous(limits = c(0, cellmax))
 count_bar
-pdf(paste0("../results/integration_exploration/", projectID,"_nuclei_count_per_cluster_group.pdf"),width = 12,height = 6)
+pdf(paste0("../results/nuclei_count/", project_ID,"_nuclei_count_per_cluster_group.pdf"),width = 12,height = 6)
 count_bar
 dev.off()
 
@@ -154,15 +158,11 @@ count_bar <- ggplot(count_per_cluster, aes(x = factor(rpca_clusters), y = `numbe
     angle = 45,
     hjust = -.01
   ) +
-  theme_classic() + scale_fill_manual(values = color.panel) +
+  theme_classic() + scale_fill_manual(values = color_panel) +
   ggtitle("Number of nuclei per cluster") +  xlab("cluster") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   scale_y_continuous(limits = c(0, cellmax))
 count_bar
-pdf(paste0("../results/integration_exploration/", projectID,"_nuclei_count_per_cluster.pdf"),width = 12,height = 6)
+pdf(paste0("../results/nuclei_count/", project_ID,"_nuclei_count_per_cluster.pdf"),width = 12,height = 6)
 count_bar
 dev.off()
-
-## ----save_object,echo=FALSE,eval=TRUE-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-saveRDS(dataObject, paste0("../rObjects/",projectID,".rds"), compress = FALSE)
-## -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

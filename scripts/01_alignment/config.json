@@ -1,7 +1,7 @@
 {
     "Commment_Input_Output_Directories": "This section specifies the input and output directories for scripts",
-    "cellranger_dir" : "../cellranger/", 
-    "cellbender_dir" : "../cellbender/",
+    "cellranger_dir" : "../../cellranger/", 
+    "cellbender_dir" : "../../cellbender/",
     "fastq_path" : "/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/fastq/",
 
     "Comment_Reference" : "This section specifies the location of the reference genome",

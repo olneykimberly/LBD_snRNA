@@ -17,8 +17,8 @@ This git repo contains scripts for the following:
 -   Metadata analysis
 -   Per processing of single nucleus RNA-sequencing data
 -   Analysis of single nucleus RNA-sequencing data 
--   Generation of manuscript figures from Olney & Rabichow et al. 2025 publication 
--   Generation of shiny app for exploration of the results presented in Olney & Rabichow et al. 2025 publication, view app [here](https://fryerlab.shinyapps.io/lbd_cwow_snrna/)
+-   Generation of manuscript figures from Olney et al. 2025 publication 
+-   Generation of shiny app for exploration of the results, view app [here](https://fryerlab.shinyapps.io/lbd_cwow_snrna/)
 
 
 *Characterize cell-type transcriptional alterations across neuropathologies:* Dementia pathologies elicit pronounced transcriptional responses in multiple cell types, including damaged and dying neurons, disease-associated microglia (DAM), and reactive disease-associated astrocytes (DAA). In Lewy body disease (LBD), increased SNCA (α-synuclein) expression leads to Lewy bodies' formation, particularly affecting dopaminergic neurons. In Alzheimer's disease (AD), elevated expression of amyloid precursor protein (APP) produces amyloid-β, a key component of amyloid plaques.The transcription patterns of cell types in cases with a combination of Aβ plaques, NFTs, and α-synuclein inclusions are not well understood. Moreover, studies have shown female-specific upregulation of DAM genes attributed to sex differences in microglial responses in AD cases. This project addresses two aims using human single nuclues RNAseq data: 
@@ -128,7 +128,7 @@ The scripts for QC are in the scripts/02_qc/directory.
 # output violin plot of XIST and UTY expression to confirm the sex of the samples
 ```
 
-3 - 5. Doublet finder, doublet exploration, and identifying potential doublets to keep. 
+  3 - 5. Doublet finder, doublet exploration, and identifying potential doublets to keep. 
 ```
 03_doublet_removal_post_cellbender.R 
 # output is two robjects:
@@ -224,7 +224,7 @@ Robust Principal Component Analysis (RPCA). Instead of standard PCA within the C
 01_variance_assessment.Rmd
 ```
 
-2 - 4. Differential expression and output tables and plots 
+  2 - 4. Differential expression and output tables and plots 
 ```
 02_differential_expression.Rmd
 03_make_DEG_excel_and_volcano_plots.Rmd
@@ -233,10 +233,17 @@ Robust Principal Component Analysis (RPCA). Instead of standard PCA within the C
 
 
 ## Shiny app 
-
+Generation of shiny app for exploration of the results\
+[cwow_snrna_shiny](https://fryerlab.shinyapps.io/lbd_cwow_snrna/)
 ```
 01_make_shiny.R
 ```
+
+## References
+All packages used in this workflow are publicity available. If you use this workflow please cite the packages used. 
+If you use the data in this workflow cite the following:
+[Olney et al. 2025](https://academic.oup.com/brain/article/148/1/69/7698452)
+
 
 ## Contacts
 

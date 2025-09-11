@@ -10,7 +10,8 @@
 source $HOME/.bash_profile
 
 module load python3
-conda activate LBD_sn 
+conda activate LBD_sn
+#conda activate cellbender 
 
 #------ Run steps 1 & 2 if you have not created the config file. 
 # 1) get read information
@@ -21,6 +22,4 @@ conda activate LBD_sn
 
 #------
 # 3) run snakemake for cellranger and cellbender
-# If only running cellranger, than only 1 task, 2 cpus per task and 4G is sufficent, cellbender requires much more. GPU is preferred. Refer to cellbender documentation. 
-#snakemake -s Snakefile -j 32 --nolock --latency-wait 15 --rerun-incomplete --cluster "sbatch --ntasks 1 --cpus-per-task=2 --mem=4G --time=00:20:00"
-snakemake -s Snakefile -j 40 --nolock --latency-wait 15 --cluster "sbatch --ntasks 1 --cpus-per-task=8 --mem=64G --time=24:00:00"
+snakemake -s Snakefile -j 40 --nolock --latency-wait 15 --cluster "sbatch --ntasks 1 --cpus-per-task=8 --mem=200000 --gres=gpu:1 -p gpu-a100 --time=8:00:00"

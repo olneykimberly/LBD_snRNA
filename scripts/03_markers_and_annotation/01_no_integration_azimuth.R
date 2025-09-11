@@ -7,75 +7,96 @@ setwd("/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/scripts/")
 
 ## ----source------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 source(here::here("/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/scripts/", "file_paths_and_colours.R"))
-projectID <- "CWOW_cellbender_mereged_singlets_with_kept_doublets"
-color.panel <- dittoColors()
+project_ID <- "CWOW_cellbender_singlets" #CWOW_cellbender_mereged_singlets_with_kept_doublets
+color_panel <- dittoColors()
 
 ## ----read_object--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 # read object
-dataObject <- readRDS(file = paste0("../rObjects/", projectID, ".rds"))
+dataObject <- readRDS(file = paste0("../rObjects/", project_ID, ".rds"))
 dataObject # inspect
 # Notes
 ## un-normalized counts (layer='counts')
 ## normalized data (layer='data')
 ## z-scored/variance-stabilized data (layer='scale.data')
 
+# Reorder samples
+barcodes <- colnames(dataObject)
+sample <- str_match(barcodes, "(.+)_[ACGT]+")[,2]
+dataObject$sample <- factor(sample, levels = order_samples)
+table(dataObject$sample)  # check
+Idents(dataObject) <- dataObject$sample
+rm(sample, barcodes)
+
+
+# Add metadata
+rownames(metadata) <- metadata$sampleID
+# Reorder the metadata data frame to match the column order of the Seurat object
+barcodes <- colnames(dataObject)
+sample <- str_match(barcodes, "(.+)_[ACGT]+")[,2]
+metadata_reordered <- metadata[sample, ]
+# Add the entire metadata dataframe to the Seurat object
+# Add the reordered metadata to the Seurat object
+dataObject <- AddMetaData(object = dataObject, metadata = metadata_reordered)
+dataObject$group <- factor(dataObject$TYPE, levels = c("CONTROL", "AD_AT", "LBD_S", "LBD_AS", "LBD_ATS"))
+
+
 ## ----JoinLayers_AZIMUTH--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-# update projectID
-projectID <- "CWOW_cellbender_joinlayers_azimuth"
+# update project_ID
+project_ID <- "CWOW_cellbender_joinlayers_azimuth"
 ## We will obtain predicted cell annotations via AZIMUTH for comparing integration methods 
 dataObject[["RNA"]] <- JoinLayers(dataObject[["RNA"]]) # first join layers
 # Azimuth annotations
 dataObject <- RunAzimuth(dataObject, reference = "humancortexref")
-saveRDS(dataObject, paste0("../rObjects/",projectID,".rds"), compress = FALSE)
+saveRDS(dataObject, paste0("../rObjects/",project_ID,".rds"), compress = FALSE)
 dataObject # inspect
 Idents(dataObject) <- dataObject$predicted.subclass # set idents
 
 # annotation
 ditto_umap <- dittoDimPlot(object = dataObject, var = "predicted.subclass", reduction.use = "ref.umap", do.label = TRUE, labels.highlight = TRUE)
-path <- paste0("../results/integration_exploration/",projectID,"_UMAP_annotations")
+pdf(paste0("../results/unintegrated_exploration/",project_ID,"_UMAP_annotations.pdf"), width = 8, height = 7)
 ditto_umap
-saveToPDF(paste0(path, ".pdf"), width = 8, height = 7)
+dev.off()
 
 # doublet status
-UMAP_doublets <- DimPlot(dataObject, reduction = "ref.umap", group.by = c("CellTypes_DF"), cols=c("black", "#66C2A5"))
-path <- paste0("../results/integration_exploration/",projectID,"_UMAP_doubletStatus")
-UMAP_doublets
-saveToPDF(paste0(path, ".pdf"), width = 8, height = 7)
+#UMAP_doublets <- DimPlot(dataObject, reduction = "ref.umap", group.by = c("CellTypes_DF"), cols=c("black", "#66C2A5"))
+#path <- paste0("../results/unintegrated_exploration/",project_ID,"_UMAP_doubletStatus")
+#UMAP_doublets
+#saveToPDF(paste0(path, ".pdf"), width = 8, height = 7)
 
 # feature plot 
 UMAP_feature <- FeaturePlot(dataObject,  reduction = "ref.umap", features = c("AQP4", "PLP1", "RBFOX3", "GAD1"))
-path <- paste0("../results/integration_exploration/",projectID, "_UMAP_feature_celltype_markers")
+pdf(paste0("../results/unintegrated_exploration/",project_ID, "_UMAP_feature_celltype_markers.pdf"), width = 12, height = 9)
 UMAP_feature
-saveToPDF(paste0(path, ".pdf"), width = 12, height = 9)
+dev.off()
 
 # sample
 UMAP_sample <- DimPlot(dataObject, reduction = "ref.umap", group.by = c("Sample_ID"))
-path <- paste0("../results/integration_exploration/",projectID,"_UMAP_sample")
+pdf(paste0("../results/unintegrated_exploration/",project_ID,"_UMAP_sample.pdf"), width = 9, height = 7)
 UMAP_sample
-saveToPDF(paste0(path, ".pdf"), width = 9, height = 7)
+dev.off()
 
 # group
 UMAP_group <- DimPlot(dataObject, reduction = "ref.umap", group.by = c("group"))
-path <- paste0("../results/integration_exploration/",projectID,"_UMAP_group")
+pdf(paste0("../results/unintegrated_exploration/",project_ID,"_UMAP_group.pdf"),width = 9, height = 7)
 UMAP_group
-saveToPDF(paste0(path, ".pdf"), width = 9, height = 7)
+dev.off()
 
 # violin features
 v1 <- VlnPlot(dataObject, features = c("AQP4", "PLP1", "FLT1", "P2RY12","RBFOX1", "GAD1"), pt.size = 0.01, stack = TRUE, flip = TRUE,
-  group.by = "predicted.subclass") + NoLegend() + ggtitle(paste0(projectID))
-pdf(paste0("../results/integration_exploration/", projectID,"_violin_celltype_markers.pdf"),width = 12,height = 8)
+  group.by = "predicted.subclass") + NoLegend() + ggtitle(paste0(project_ID))
+pdf(paste0("../results/unintegrated_exploration/", project_ID,"_violin_celltype_markers.pdf"),width = 12,height = 8)
 v1
 dev.off()
 
 # DotPlot annotations
-dot_anno <- DotPlot(dataObject, features = markers.to.plot,cluster.idents = TRUE)+ RotatedAxis()
-pdf(paste0("../results/integration_exploration/", projectID,"_DotPlot_annotations.pdf"),width = 12,height = 6)
+dot_anno <- DotPlot(dataObject, features = genes_markers,cluster.idents = TRUE)+ RotatedAxis()
+pdf(paste0("../results/unintegrated_exploration/", project_ID,"_DotPlot_annotations.pdf"),width = 12,height = 6)
 dot_anno
 dev.off()
 
 # DotPlot split by group
-dot_group <- DotPlot(dataObject, features = markers.to.plot,cluster.idents = TRUE, split.by = "group", cols = ATSColors)+ RotatedAxis()
-pdf(paste0("../results/integration_exploration/", projectID,"_DotPlot_group.pdf"),width = 12,height = 20)
+dot_group <- DotPlot(dataObject, features = genes_markers,cluster.idents = TRUE, split.by = "group", cols = color_ATS)+ RotatedAxis()
+pdf(paste0("../results/unintegrated_exploration/", project_ID,"_DotPlot_group.pdf"),width = 12,height = 20)
 dot_group
 dev.off()
 
@@ -104,12 +125,12 @@ count_bar <- ggplot(count_melt, aes(x = factor(cluster), y = `number of nuclei`,
     angle = 45,
     hjust = -.01
   ) +
-  theme_classic() + scale_fill_manual(values = color.panel) +
+  theme_classic() + scale_fill_manual(values = color_panel) +
   ggtitle("Number of nuclei per cluster") +  xlab("cluster") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   scale_y_continuous(limits = c(0, cellmax))
 count_bar
-pdf(paste0("../results/integration_exploration/", projectID,"_nuclei_count_per_cluster.pdf"),width = 12,height = 6)
+pdf(paste0("../results/unintegrated_exploration/", project_ID,"_nuclei_count_per_cluster.pdf"),width = 12,height = 6)
 count_bar
 dev.off()
 

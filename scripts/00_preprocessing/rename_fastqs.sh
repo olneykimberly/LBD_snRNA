@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Default directory (can be overridden by an argument)
-file_dir="../fastq"
+file_dir="../../fastq"
 
 # If an argument is provided, use it as the directory
 if [[ -n $1 ]]; then
