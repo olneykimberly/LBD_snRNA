@@ -67,6 +67,7 @@ library(batchelor)
 library(DropletQC)
 library(Rsamtools)
 library(GenomicRanges)
+library(NatParksPalettes)
 
 #options(future.globals.maxSize = 1e9)
 options(future.globals.maxSize = 150 * 1024^3)
