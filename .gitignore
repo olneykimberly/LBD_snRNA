@@ -3,3 +3,5 @@
 .RData
 .Ruserdata
 fastq/*
+scripts/01_alignment/slurm*
+scripts/01_alignment/.snakemake/*
