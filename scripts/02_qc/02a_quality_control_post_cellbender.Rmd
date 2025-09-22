@@ -126,7 +126,6 @@ dataObject$group <- factor(dataObject$TYPE, levels = c("CONTROL", "AD_AT", "LBD_
 nuclei count per sample, sex, and group
 ```{r}
 # Sample
-table(sobj$sample) 
 table(dataObject$Sample_ID) 
 
 # Sex 

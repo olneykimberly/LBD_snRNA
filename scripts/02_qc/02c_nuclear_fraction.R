@@ -73,4 +73,3 @@ write.table(table_cell_status_sample, paste0("../results/nuclear_fraction/", pro
 pdf(paste0("../results/nuclear_fraction/", project_ID, "_summary.pdf"), width = 10, height = 10)
 identify_empty_drops(nf_umi=df_nf_umi, include_plot = TRUE)
 dev.off()
-

@@ -9,36 +9,15 @@ color.panel <- dittoColors()
 
 # read object
 dataObject  <- readRDS(paste0("../rObjects/",projectID,"_RNA.rds"))
+Layers(dataObject) # Layers are by cell type
 dataObject[["RNA"]] <- JoinLayers(dataObject[["RNA"]])
-
-## ----metadata-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-metadata <- subset(metadata, Sample_ID != "LBD_AS_F4")
-metadata$sampleID <- factor(metadata$Sample_ID, levels = c(metadata$Sample_ID))
-samples <- metadata$sampleID 
-sex_order <- factor(metadata$sex_inferred, levels = unique(metadata$sex_inferred))
-disease_order <- factor(metadata$TYPE, levels = c("CONTROL", "AD_AT", "LBD_S", "LBD_AS", "LBD_ATS"))
-
-metadata <- metadata %>%
-  mutate(sampleID = gsub(".*_(\\d+)_.*_(BR_Nuclei).*", "\\2_\\1", Lane.Name))
-samples <- metadata$sampleID 
-
-# sampleID with disease_order
-order <- metadata %>%
-  arrange(disease_order) %>%
-  dplyr::select(TYPE, sampleID, Sample_ID)
-samples <- order$sampleID
-disease_order <- order$TYPE
-sample_order <- factor(order$Sample_ID, levels = order$Sample_ID)
-
-seurat_sample_order <- as.character(dataObject$sample)
-matched_metadata <- metadata[match(seurat_sample_order, as.character(metadata$sampleID)), ]
-
-dataObject$Sample_ID <- factor(matched_metadata$Sample_ID, levels = sample_order)
-table(dataObject$Sample_ID )
-
+Layers(dataObject)
+table(dataObject$Sample_ID)
+## ----annotation-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 genes <- readRDS("../rObjects/annotation.rds")
-mt.genes.df <- subset(genes, seqnames == "chrM")
-mt.genes <- mt.genes.df$gene_name
+genes_mt_df <- subset(genes, seqnames == "chrM")
+genes_mt <- genes_mt_df$gene_name
+
 ## ----QC_metrics-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 print("Summary nCount")
 summary(dataObject$nCount_RNA)
@@ -49,8 +28,25 @@ dataObject$cell.complexity <- log10(dataObject$nFeature_RNA) / log10(dataObject$
 
 # Chromosome M
 gene.names <- rownames(dataObject)
-dataObject$percent.mt <- PercentageFeatureSet(dataObject, features = mt.genes)
+dataObject$percent.mt <- PercentageFeatureSet(dataObject, features = genes_mt)
 summary(dataObject$percent.mt)
+
+
+barcodes <- colnames(dataObject)
+sample <- str_match(barcodes, "(.+)_[ACGT]+")[,2]
+dataObject$sample <- factor(sample, levels = order_samples)
+table(dataObject$sample)  # check
+Idents(dataObject) <- dataObject$sample
+rm(sample, barcodes)
+
+# Assuming 'metadata' is your metadata dataframe
+# and its 'sampleID' column contains the cell IDs (the same IDs as the Seurat object's cells)
+rownames(metadata) <- metadata$sampleID
+metadata_reordered <- metadata[sample, ]
+# Add the entire metadata dataframe to the Seurat object
+# Add the reordered metadata to the Seurat object
+dataObject <- AddMetaData(object = dataObject, metadata = metadata_reordered)
+dataObject$group <- factor(dataObject$TYPE, levels = c("CONTROL", "AD_AT", "LBD_S", "LBD_AS", "LBD_ATS"))
 
 ## ----cells_per_sample-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 # Visualize the number of cell counts per sample
@@ -66,12 +62,12 @@ ncells1 <- ggplot(data, aes(x = Sample_ID, y = frequency, fill = Sample_ID)) +
             hjust = -.025,
             angle = 90) +
   #scale_fill_manual(values = sample_colors) + 
-  scale_y_continuous(breaks = seq(0,30000, by = 2000), limits = c(0,30000)) +
+  scale_y_continuous(breaks = seq(0,15000, by = 2000), limits = c(0,15000)) +
   ggtitle("Nuclei per sample") +
   theme(legend.position =  "none") + 
   theme(axis.text.x = element_text(angle = 45, hjust=1))
 ncells1
-pdf(paste0("../results/clean/", projectID,"_nuclei_count_per_sample.pdf"),width = 12,height = 4.5)
+pdf(paste0("../results/nuclei_count/", projectID,"_nuclei_count_per_sample.pdf"),width = 10,height = 4.5)
 ncells1
 dev.off()
 
@@ -131,7 +127,7 @@ box_plot_multiple <- ggplot(df, aes(x = nCount_RNA, y = Sample_ID, color = Sampl
         plot.margin = margin(b = 0)) # Reduce bottom margin
 # For individual boxplots for each Sample_ID, arranged on top:
 combined_plot <- box_plot_multiple / density_plot + plot_layout(heights = c(2, 3)) # Adjust heights as needed
-pdf(paste0("../results/clean/density/", projectID,"_nCount.pdf"),width = 8,height = 8)
+pdf(paste0("../results/density/", projectID,"_nCount.pdf"),width = 8,height = 8)
 print(combined_plot)
 dev.off()
 
@@ -176,7 +172,7 @@ box_plot_multiple <- ggplot(df, aes(x = nFeature_RNA, y = Sample_ID, color = Sam
         plot.margin = margin(b = 0)) # Reduce bottom margin
 # For individual boxplots for each Sample_ID, arranged on top:
 combined_plot <- box_plot_multiple / density_plot + plot_layout(heights = c(2, 3)) # Adjust heights as needed
-pdf(paste0("../results/clean/density/", projectID,"_nFeature.pdf"),width = 8,height = 8)
+pdf(paste0("../results/density/", projectID,"_nFeature.pdf"),width = 8,height = 8)
 print(combined_plot)
 dev.off()
 
@@ -218,7 +214,7 @@ box_plot_multiple <- ggplot(df, aes(x = percent.mt, y = Sample_ID, color = Sampl
         plot.margin = margin(b = 0)) # Reduce bottom margin
 # For individual boxplots for each Sample_ID, arranged on top:
 combined_plot <- box_plot_multiple / density_plot + plot_layout(heights = c(2, 3)) # Adjust heights as needed
-pdf(paste0("../results/clean/density/", projectID,"_mt.pdf"),width = 8,height = 8)
+pdf(paste0("../results/density/", projectID,"_mt.pdf"),width = 8,height = 8)
 print(combined_plot)
 dev.off()
 
@@ -254,7 +250,7 @@ projectID <- "CWOW_cellbender_RPCAIntegration_clean"
 
 dataObject <- RunPCA(dataObject, npcs = 30, verbose = F)
 features <- dataObject@assays$SCT@var.features
-write.table(features, paste0("../results/clean/",projectID,"_SCT_variable_features.txt"), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(features, paste0("../results/",projectID,"_SCT_variable_features.txt"), sep = "\t", row.names = FALSE, quote = FALSE)
 
 dataObject <- IntegrateLayers(object = dataObject, orig.reduction = "pca", method = RPCAIntegration, normalization.method = "SCT", verbose = F, new.reduction = "integrated.rpca")
 dataObject <- FindNeighbors(dataObject, reduction = "integrated.rpca", dims = 1:30)
@@ -266,66 +262,38 @@ projectID <- "CWOW_cellbender_RPCAIntegration_clean"
 saveRDS(dataObject, paste0("../rObjects/",projectID,"_SCT.rds"), compress = FALSE)
 ## -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-pdf(paste0("../results/clean/",projectID,"_UMAP_annotations_and_group.pdf"), width = 14, height = 7)
-DimPlot(dataObject, reduction = "integrated.rpca", group.by = c("group", "predicted.subclass")) # disease and azimuth annotations
-dev.off()
-
-ditto_umap <- dittoDimPlot(object = dataObject, var = "predicted.subclass", reduction.use = "integrated.rpca", do.label = TRUE, labels.highlight = TRUE)
-pdf(paste0("../results/clean/",projectID,"_UMAP_annotations.pdf"), width = 8, height = 7)
-ditto_umap
-dev.off()
-
-# doublet status
-UMAP_doublets <- DimPlot(dataObject, reduction = "integrated.rpca", group.by = c("CellTypes_DF"), cols=c("black", "#66C2A5"))
-pdf(paste0("../results/clean/",projectID,"_UMAP_doubletStatus.pdf"), width = 8, height = 7)
-UMAP_doublets
-dev.off()
-
 # feature plot 
-UMAP_feature <- FeaturePlot(dataObject,  reduction = "integrated.rpca", features = c("AQP4", "PLP1", "RBFOX3", "GAD1"))
-pdf(paste0("../results/clean/",projectID, "_UMAP_feature_celltype_markers.pdf"), width = 12, height = 9)
+UMAP_feature <- FeaturePlot(dataObject,  reduction = "integrated.rpca", features = c("AQP4", "PLP1", "SNAP25", "GAD1", "DOCK8"))
+pdf(paste0("../results/",projectID, "_UMAP_feature_celltype_markers.pdf"), width = 12, height = 9)
 UMAP_feature
 dev.off()
 
 # sample
 UMAP_sample <- DimPlot(dataObject, reduction = "integrated.rpca", group.by = c("Sample_ID"))
-pdf(paste0("../results/clean/",projectID,"_UMAP_sample.pdf"), width = 9, height = 7)
+pdf(paste0("../results/",projectID,"_UMAP_sample.pdf"), width = 9, height = 7)
 UMAP_sample
 dev.off()
 
 # group
 UMAP_group <- DimPlot(dataObject, reduction = "integrated.rpca", group.by = c("group"))
-pdf(paste0("../results/clean/",projectID,"_UMAP_group.pdf"), width = 9, height = 7)
+pdf(paste0("../results/",projectID,"_UMAP_group.pdf"), width = 9, height = 7)
 UMAP_group
 dev.off()
 
-# violin features predicted.subclass
-v1 <- VlnPlot(dataObject, features = c("AQP4", "PLP1", "FLT1", "P2RY12","RBFOX1", "GAD1"), pt.size = 0.01, stack = TRUE, flip = TRUE,
-              group.by = "predicted.subclass") + NoLegend() + ggtitle(paste0(projectID))
-pdf(paste0("../results/clean/", projectID,"_violin_celltype_markers_azimuth.pdf"),width = 12,height = 8)
-v1
-dev.off()
-
 # violin features clusters
-v1 <- VlnPlot(dataObject, features = c("AQP4", "PLP1", "FLT1", "P2RY12","RBFOX1", "GAD1"), pt.size = 0.01, stack = TRUE, flip = TRUE,
+v1 <- VlnPlot(dataObject, features = c("AQP4", "PLP1", "FLT1", "DOCK8","SNAP25", "GAD1"), pt.size = 0.01, stack = TRUE, flip = TRUE,
               group.by = "rpca_clusters") + NoLegend() + ggtitle(paste0(projectID))
-pdf(paste0("../results/clean/", projectID,"_violin_celltype_markers_by_cluster.pdf"),width = 12,height = 8)
+pdf(paste0("../results/", projectID,"_violin_celltype_markers_by_cluster.pdf"),width = 12,height = 8)
 v1
 dev.off()
 
 # DotPlot clusters
 Idents(dataObject) <- dataObject$rpca_clusters
-dot_clusters <- DotPlot(dataObject, features = markers.to.plot, cluster.idents = TRUE)+ RotatedAxis()
-pdf(paste0("../results/clean/", projectID,"_DotPlot_clusters.pdf"),width = 12,height = 15)
+dot_clusters <- DotPlot(dataObject, features = genes_markers, cluster.idents = TRUE)+ RotatedAxis()
+pdf(paste0("../results/", projectID,"_DotPlot_clusters.pdf"),width = 12,height = 15)
 dot_clusters
 dev.off()
 
-Idents(dataObject) <- dataObject$predicted.subclass
-# DotPlot annotations
-dot_anno <- DotPlot(dataObject, features = markers.to.plot, cluster.idents = TRUE)+ RotatedAxis()
-pdf(paste0("../results/clean/", projectID,"_DotPlot_annotations.pdf"),width = 12,height = 6)
-dot_anno
-dev.off()
 
 # Nuclei count per cluster
 count_per_cluster <- FetchData(dataObject, vars = c("group", "rpca_clusters")) %>%
@@ -350,7 +318,7 @@ count_bar <- ggplot(count_melt, aes(x = factor(group), y = `number of nuclei`, f
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   scale_y_continuous(limits = c(0, cellmax))
 count_bar
-pdf(paste0("../results/clean/", projectID,"_nuclei_count_per_cluster_group.pdf"),width = 12,height = 6)
+pdf(paste0("../results/", projectID,"_nuclei_count_per_cluster_group.pdf"),width = 12,height = 6)
 count_bar
 dev.off()
 
@@ -379,7 +347,7 @@ count_bar <- ggplot(count_per_cluster, aes(x = factor(rpca_clusters), y = `numbe
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   scale_y_continuous(limits = c(0, cellmax))
 count_bar
-pdf(paste0("../results/clean/", projectID,"_nuclei_count_per_cluster.pdf"),width = 12,height = 6)
+pdf(paste0("../results/", projectID,"_nuclei_count_per_cluster.pdf"),width = 12,height = 6)
 count_bar
 dev.off()
 ## ----End-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

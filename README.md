@@ -116,7 +116,11 @@ The scripts for QC are in the scripts/02_qc/directory.
 1. Create Seurat object. **Note that this workflow uses Seurat v5.  
 ```
 # cd scripts/02_qc/
-01_create_seurat_object_cellranger.R # output is robject CWOW_cellbender.rds
+00_nuclear_fraction.R 
+# calculates the nuclear fraction score for each nuclei. Uses DropletQC
+
+01_create_seurat_object_cellranger.R 
+# output is robject CWOW_cellbender.rds
 ```
 
 2. Quality filtering such as min and max nCount, nFeature, and percent MT
@@ -126,6 +130,9 @@ The scripts for QC are in the scripts/02_qc/directory.
 
 02b_sex_check_cellbender.Rmd 
 # output violin plot of XIST and UTY expression to confirm the sex of the samples
+
+02c_nuclear_fraction.R
+# output is nuclear fraction information and cell status
 ```
 
   3 - 5. Doublet finder, doublet exploration, and identifying potential doublets to keep. 
@@ -140,6 +147,14 @@ The scripts for QC are in the scripts/02_qc/directory.
 04_explore_doublets_cellbender.R 
 # output is various plots to assess the doublets and CWOW_cellbender_doublets_harmony_azimuth.rds object
 
+05_explore_singlets.Rmd
+# various plots of just the singlets
+```
+
+Opitionally, explore the doublets and determine if any doublets should be kept.\
+To retain only high quality nuclei, we opted to exclude all doublets
+```
+#--- OPITIONAL 
 # 05 merges the doublets to keep with the singlets 
 # ** MUST update line 23 of the subset for doublet clusters to be removed
 05a_doublets_to_keep_and_merge_with_singlets_cellbender.R 
@@ -163,7 +178,7 @@ The scripts for find markers and annotation are in the 03_markers_and_annotation
 # output plots named "CWOW_cellbender_joinlayers_azimuth"
 # output rObject CWOW_cellbender_joinlayers_azimuth.rds
 
-# Input for the 02 script is the rObject CWOW_cellbender_joinlayers_azimuth.rds obtained for script 01
+# Input for the 02 script is the rObject CWOW_cellbender_CWOW_cellbender_singlets.rds obtained from 03_doublet_removal_post_cellbender.R
 # split the object by sample and run SCTransform
 # SCTransform replaces NormalizeData(), ScaleData(), and FindVariableFeatures()
 # after SCTransform, the script will run PCA, UMAP, FindNeighbors, FindClusters
