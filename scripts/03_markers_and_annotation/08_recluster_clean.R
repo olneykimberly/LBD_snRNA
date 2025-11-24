@@ -4,248 +4,250 @@ setwd("/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/scripts/")
 
 # Libraris, paths, colors
 source(here::here("/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/scripts/", "file_paths_and_colours.R"))
-projectID <- "CWOW_cellbender_RPCAIntegration_clean"
-color.panel <- dittoColors()
-
-# read object
-dataObject  <- readRDS(paste0("../rObjects/",projectID,"_RNA.rds"))
-Layers(dataObject) # Layers are by cell type
-dataObject[["RNA"]] <- JoinLayers(dataObject[["RNA"]])
-Layers(dataObject)
-table(dataObject$Sample_ID)
-## ----annotation-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-genes <- readRDS("../rObjects/annotation.rds")
-genes_mt_df <- subset(genes, seqnames == "chrM")
-genes_mt <- genes_mt_df$gene_name
-
-## ----QC_metrics-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-print("Summary nCount")
-summary(dataObject$nCount_RNA)
-print("Summary nFeature")
-summary(dataObject$nFeature_RNA)
-# cell.complexity
-dataObject$cell.complexity <- log10(dataObject$nFeature_RNA) / log10(dataObject$nCount_RNA)
-
-# Chromosome M
-gene.names <- rownames(dataObject)
-dataObject$percent.mt <- PercentageFeatureSet(dataObject, features = genes_mt)
-summary(dataObject$percent.mt)
-
-
-barcodes <- colnames(dataObject)
-sample <- str_match(barcodes, "(.+)_[ACGT]+")[,2]
-dataObject$sample <- factor(sample, levels = order_samples)
-table(dataObject$sample)  # check
-Idents(dataObject) <- dataObject$sample
-rm(sample, barcodes)
-
-# Assuming 'metadata' is your metadata dataframe
-# and its 'sampleID' column contains the cell IDs (the same IDs as the Seurat object's cells)
-rownames(metadata) <- metadata$sampleID
-metadata_reordered <- metadata[sample, ]
-# Add the entire metadata dataframe to the Seurat object
-# Add the reordered metadata to the Seurat object
-dataObject <- AddMetaData(object = dataObject, metadata = metadata_reordered)
-dataObject$group <- factor(dataObject$TYPE, levels = c("CONTROL", "AD_AT", "LBD_S", "LBD_AS", "LBD_ATS"))
-
-## ----cells_per_sample-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-# Visualize the number of cell counts per sample
-data <- as.data.frame(table(dataObject$Sample_ID))
-colnames(data) <- c("Sample_ID","frequency")
-
-ncells1 <- ggplot(data, aes(x = Sample_ID, y = frequency, fill = Sample_ID)) + 
-  geom_col() +
-  theme_classic() +
-  geom_text(aes(label = frequency), 
-            position=position_dodge(width=0.9), 
-            #vjust=-0.25, 
-            hjust = -.025,
-            angle = 90) +
-  #scale_fill_manual(values = sample_colors) + 
-  scale_y_continuous(breaks = seq(0,15000, by = 2000), limits = c(0,15000)) +
-  ggtitle("Nuclei per sample") +
-  theme(legend.position =  "none") + 
-  theme(axis.text.x = element_text(angle = 45, hjust=1))
-ncells1
-pdf(paste0("../results/nuclei_count/", projectID,"_nuclei_count_per_sample.pdf"),width = 10,height = 4.5)
-ncells1
-dev.off()
-
-mean_counts <- mean(data$frequency)
-median(data$frequency)
-sd_counts <- sd(data$frequency)
-
-upper_threshold <- mean_counts + 2 * sd_counts
-lower_threshold <- mean_counts - 2 * sd_counts
-
-data$is_outlier <- ifelse(data$frequency > upper_threshold | data$frequency < lower_threshold, TRUE, FALSE)
-
-# To view the outlier samples:
-outlier_samples <- data[data$is_outlier == TRUE, ]
-print(outlier_samples)
-
-## ----Density-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-df <- dataObject@meta.data
-density_plot <- ggplot(df, aes(x = nCount_RNA, color = Sample_ID, fill = Sample_ID)) +
-  geom_density(alpha = 0.2) +
-  theme_classic() +
-  scale_x_log10() +
-  xlab("nCount_RNA") +
-  ylab("Density") +
-  ggtitle("Density nCount") +
-  theme(axis.title.x = element_blank(), # Remove x-axis title for cleaner alignment
-        axis.text.x = element_blank(),   # Remove x-axis text as boxplot will provide labels
-        axis.ticks.x = element_blank())  # Remove x-axis ticks
-
-# Calculate summary statistics per Sample_ID
-summary_stats <- df %>%
-  group_by(Sample_ID) %>%
-  summarise(
-    ymin = min(nCount_RNA),
-    ymax = max(nCount_RNA),
-    Q1 = quantile(nCount_RNA, 0.25),
-    Median = quantile(nCount_RNA, 0.5),
-    Q3 = quantile(nCount_RNA, 0.75),
-    Mean = mean(nCount_RNA)
-  )
-
-# Convert to log10 if your x-axis in the plot is log10
-summary_stats_log10 <- summary_stats %>%
-  mutate(across(c(ymin, ymax, Q1, Median, Q3, Mean), ~log10(.x)))
-# For multiple boxplots:
-box_plot_multiple <- ggplot(df, aes(x = nCount_RNA, y = Sample_ID, color = Sample_ID, fill = Sample_ID)) +
-  geom_boxplot(width = 0.5, alpha = 0.2, outlier.shape = NA) +
-  theme_classic() +
-  scale_x_log10() +
-  ggtitle("Boxplot nCount") +
-  xlab("") + # No x-label here
-  ylab("") + # No y-label here, as it will be provided by the density plot
-  theme(legend.position = "none",
-        axis.text.y = element_blank(), # Hide y-axis text to clean up
-        axis.ticks.y = element_blank(), # Hide y-axis ticks
-        axis.title.y = element_blank(), # Hide y-axis title
-        plot.margin = margin(b = 0)) # Reduce bottom margin
-# For individual boxplots for each Sample_ID, arranged on top:
-combined_plot <- box_plot_multiple / density_plot + plot_layout(heights = c(2, 3)) # Adjust heights as needed
-pdf(paste0("../results/density/", projectID,"_nCount.pdf"),width = 8,height = 8)
-print(combined_plot)
-dev.off()
-
-density_plot <- ggplot(df, aes(x = nFeature_RNA, color = Sample_ID, fill = Sample_ID)) +
-  geom_density(alpha = 0.2) +
-  theme_classic() +
-  scale_x_log10() +
-  xlab("nFeature_RNA") +
-  ylab("Density") +
-  ggtitle("Density nFeature") +
-  theme(axis.title.x = element_blank(), # Remove x-axis title for cleaner alignment
-        axis.text.x = element_blank(),   # Remove x-axis text as boxplot will provide labels
-        axis.ticks.x = element_blank())  # Remove x-axis ticks
-
-# Calculate summary statistics per Sample_ID
-summary_stats <- df %>%
-  group_by(Sample_ID) %>%
-  summarise(
-    ymin = min(nFeature_RNA),
-    ymax = max(nFeature_RNA),
-    Q1 = quantile(nFeature_RNA, 0.25),
-    Median = quantile(nFeature_RNA, 0.5),
-    Q3 = quantile(nFeature_RNA, 0.75),
-    Mean = mean(nFeature_RNA)
-  )
-
-# Convert to log10 if your x-axis in the plot is log10
-summary_stats_log10 <- summary_stats %>%
-  mutate(across(c(ymin, ymax, Q1, Median, Q3, Mean), ~log10(.x)))
-# For multiple boxplots:
-box_plot_multiple <- ggplot(df, aes(x = nFeature_RNA, y = Sample_ID, color = Sample_ID, fill = Sample_ID)) +
-  geom_boxplot(width = 0.5, alpha = 0.2, outlier.shape = NA) +
-  theme_classic() +
-  scale_x_log10() +
-  ggtitle("Boxplot nFeature") +
-  xlab("") + # No x-label here
-  ylab("") + # No y-label here, as it will be provided by the density plot
-  theme(legend.position = "none",
-        axis.text.y = element_blank(), # Hide y-axis text to clean up
-        axis.ticks.y = element_blank(), # Hide y-axis ticks
-        axis.title.y = element_blank(), # Hide y-axis title
-        plot.margin = margin(b = 0)) # Reduce bottom margin
-# For individual boxplots for each Sample_ID, arranged on top:
-combined_plot <- box_plot_multiple / density_plot + plot_layout(heights = c(2, 3)) # Adjust heights as needed
-pdf(paste0("../results/density/", projectID,"_nFeature.pdf"),width = 8,height = 8)
-print(combined_plot)
-dev.off()
-
-density_plot <- ggplot(df, aes(x = percent.mt, color = Sample_ID, fill = Sample_ID)) +
-  geom_density(alpha = 0.2) +
-  theme_classic() +
-  xlab("percent.mt") +
-  ylab("Density") +
-  ggtitle("Density percent.mt") +
-  theme(axis.title.x = element_blank(), # Remove x-axis title for cleaner alignment
-        axis.text.x = element_blank(),   # Remove x-axis text as boxplot will provide labels
-        axis.ticks.x = element_blank())  # Remove x-axis ticks
-
-# Calculate summary statistics per Sample_ID
-summary_stats <- df %>%
-  group_by(Sample_ID) %>%
-  summarise(
-    ymin = min(percent.mt),
-    ymax = max(percent.mt),
-    Q1 = quantile(percent.mt, 0.25),
-    Median = quantile(percent.mt, 0.5),
-    Q3 = quantile(percent.mt, 0.75),
-    Mean = mean(percent.mt)
-  )
-# Convert to log10 if your x-axis in the plot is log10
-summary_stats_log10 <- summary_stats %>%
-  mutate(across(c(ymin, ymax, Q1, Median, Q3, Mean),))
-# For multiple boxplots:
-box_plot_multiple <- ggplot(df, aes(x = percent.mt, y = Sample_ID, color = Sample_ID, fill = Sample_ID)) +
-  geom_boxplot(width = 0.5, alpha = 0.2, outlier.shape = NA) +
-  theme_classic() +
-  ggtitle("Boxplot percent.mt") +
-  xlab("") + # No x-label here
-  ylab("") + # No y-label here, as it will be provided by the density plot
-  theme(legend.position = "none",
-        axis.text.y = element_blank(), # Hide y-axis text to clean up
-        axis.ticks.y = element_blank(), # Hide y-axis ticks
-        axis.title.y = element_blank(), # Hide y-axis title
-        plot.margin = margin(b = 0)) # Reduce bottom margin
-# For individual boxplots for each Sample_ID, arranged on top:
-combined_plot <- box_plot_multiple / density_plot + plot_layout(heights = c(2, 3)) # Adjust heights as needed
-pdf(paste0("../results/density/", projectID,"_mt.pdf"),width = 8,height = 8)
-print(combined_plot)
-dev.off()
-
-## ----Preprocess_for_integration----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-dataObject[["RNA"]] <- split(dataObject[["RNA"]], f = dataObject$Sample_ID)
-
-# since the data is split into layers, normalization and variable feature identification is performed for each sample independently (a consensus set of variable features is automatically identified).
-dataObject # inspect
-# Layers
-print("Inspect Layers")
-Layers(dataObject[["RNA"]])
-
-dataObject <- SCTransform(dataObject, verbose = TRUE, conserve.memory = TRUE) # this single command replaces NormalizeData(), ScaleData(), and FindVariableFeatures().
-print("Insepect SCT")
-DefaultAssay(dataObject) # inspect
-saveRDS(dataObject, paste0("../rObjects/",projectID,"_SCTransform_only.rds"), compress = FALSE)
-
-print("Identify the 10 most highly variable genes:")
-top10 <- head(VariableFeatures(dataObject), 10)
-top10
-
-dataObject <- RunPCA(dataObject, npcs = 30, verbose = F)
-dataObject <- RunUMAP(dataObject, dims = 1:30, reduction = "pca", reduction.name = "umap.unintegrated")
-dataObject <- FindNeighbors(dataObject, dims = 1:30, reduction = "pca", assay = "SCT")
-dataObject <- FindClusters(dataObject, resolution = 0.6, cluster.name = "unintegrated_clusters")
-dataObject <- RunUMAP(dataObject, dims = 1:30, reduction = "pca", reduction.name = "umap.unintegrated")
-projectID <- "CWOW_cellbender_SCTransform_clean"
-saveRDS(dataObject, paste0("../rObjects/",projectID,".rds"), compress = FALSE)
+# projectID <- "CWOW_cellbender_RPCAIntegration_clean"
+# color.panel <- dittoColors()
+# 
+# # read object
+# dataObject  <- readRDS(paste0("../rObjects/",projectID,"_RNA.rds"))
+# Layers(dataObject) # Layers are by cell type
+# dataObject[["RNA"]] <- JoinLayers(dataObject[["RNA"]])
+# Layers(dataObject)
+# table(dataObject$Sample_ID)
+# ## ----annotation-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# genes <- readRDS("../rObjects/annotation.rds")
+# genes_mt_df <- subset(genes, seqnames == "chrM")
+# genes_mt <- genes_mt_df$gene_name
+# 
+# ## ----QC_metrics-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# print("Summary nCount")
+# summary(dataObject$nCount_RNA)
+# print("Summary nFeature")
+# summary(dataObject$nFeature_RNA)
+# # cell.complexity
+# dataObject$cell.complexity <- log10(dataObject$nFeature_RNA) / log10(dataObject$nCount_RNA)
+# 
+# # Chromosome M
+# gene.names <- rownames(dataObject)
+# dataObject$percent.mt <- PercentageFeatureSet(dataObject, features = genes_mt)
+# summary(dataObject$percent.mt)
+# 
+# 
+# barcodes <- colnames(dataObject)
+# sample <- str_match(barcodes, "(.+)_[ACGT]+")[,2]
+# dataObject$sample <- factor(sample, levels = order_samples)
+# table(dataObject$sample)  # check
+# Idents(dataObject) <- dataObject$sample
+# rm(barcodes)
+# 
+# # Assuming 'metadata' is your metadata dataframe
+# # and its 'sampleID' column contains the cell IDs (the same IDs as the Seurat object's cells)
+# rownames(metadata) <- metadata$sampleID
+# metadata_reordered <- metadata[sample, ]
+# # Add the entire metadata dataframe to the Seurat object
+# # Add the reordered metadata to the Seurat object
+# dataObject <- AddMetaData(object = dataObject, metadata = metadata_reordered)
+# dataObject$group <- factor(dataObject$TYPE, levels = c("CONTROL", "AD_AT", "LBD_S", "LBD_AS", "LBD_ATS"))
+# 
+# ## ----cells_per_sample-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# # Visualize the number of cell counts per sample
+# data <- as.data.frame(table(dataObject$Sample_ID))
+# colnames(data) <- c("Sample_ID","frequency")
+# 
+# ncells1 <- ggplot(data, aes(x = Sample_ID, y = frequency, fill = Sample_ID)) + 
+#   geom_col() +
+#   theme_classic() +
+#   geom_text(aes(label = frequency), 
+#             position=position_dodge(width=0.9), 
+#             #vjust=-0.25, 
+#             hjust = -.025,
+#             angle = 90) +
+#   #scale_fill_manual(values = sample_colors) + 
+#   scale_y_continuous(breaks = seq(0,15000, by = 2000), limits = c(0,15000)) +
+#   ggtitle("Nuclei per sample") +
+#   theme(legend.position =  "none") + 
+#   theme(axis.text.x = element_text(angle = 45, hjust=1))
+# ncells1
+# pdf(paste0("../results/nuclei_count/", projectID,"_nuclei_count_per_sample.pdf"),width = 10,height = 4.5)
+# ncells1
+# dev.off()
+# 
+# mean_counts <- mean(data$frequency)
+# median(data$frequency)
+# sd_counts <- sd(data$frequency)
+# 
+# upper_threshold <- mean_counts + 2 * sd_counts
+# lower_threshold <- mean_counts - 2 * sd_counts
+# 
+# data$is_outlier <- ifelse(data$frequency > upper_threshold | data$frequency < lower_threshold, TRUE, FALSE)
+# 
+# # To view the outlier samples:
+# outlier_samples <- data[data$is_outlier == TRUE, ]
+# print(outlier_samples)
+# 
+# ## ----Density-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# df <- dataObject@meta.data
+# density_plot <- ggplot(df, aes(x = nCount_RNA, color = Sample_ID, fill = Sample_ID)) +
+#   geom_density(alpha = 0.2) +
+#   theme_classic() +
+#   scale_x_log10() +
+#   xlab("nCount_RNA") +
+#   ylab("Density") +
+#   ggtitle("Density nCount") +
+#   theme(axis.title.x = element_blank(), # Remove x-axis title for cleaner alignment
+#         axis.text.x = element_blank(),   # Remove x-axis text as boxplot will provide labels
+#         axis.ticks.x = element_blank())  # Remove x-axis ticks
+# 
+# # Calculate summary statistics per Sample_ID
+# summary_stats <- df %>%
+#   group_by(Sample_ID) %>%
+#   summarise(
+#     ymin = min(nCount_RNA),
+#     ymax = max(nCount_RNA),
+#     Q1 = quantile(nCount_RNA, 0.25),
+#     Median = quantile(nCount_RNA, 0.5),
+#     Q3 = quantile(nCount_RNA, 0.75),
+#     Mean = mean(nCount_RNA)
+#   )
+# 
+# # Convert to log10 if your x-axis in the plot is log10
+# summary_stats_log10 <- summary_stats %>%
+#   mutate(across(c(ymin, ymax, Q1, Median, Q3, Mean), ~log10(.x)))
+# # For multiple boxplots:
+# box_plot_multiple <- ggplot(df, aes(x = nCount_RNA, y = Sample_ID, color = Sample_ID, fill = Sample_ID)) +
+#   geom_boxplot(width = 0.5, alpha = 0.2, outlier.shape = NA) +
+#   theme_classic() +
+#   scale_x_log10() +
+#   ggtitle("Boxplot nCount") +
+#   xlab("") + # No x-label here
+#   ylab("") + # No y-label here, as it will be provided by the density plot
+#   theme(legend.position = "none",
+#         axis.text.y = element_blank(), # Hide y-axis text to clean up
+#         axis.ticks.y = element_blank(), # Hide y-axis ticks
+#         axis.title.y = element_blank(), # Hide y-axis title
+#         plot.margin = margin(b = 0)) # Reduce bottom margin
+# # For individual boxplots for each Sample_ID, arranged on top:
+# combined_plot <- box_plot_multiple / density_plot + plot_layout(heights = c(2, 3)) # Adjust heights as needed
+# pdf(paste0("../results/density/", projectID,"_nCount.pdf"),width = 8,height = 8)
+# print(combined_plot)
+# dev.off()
+# 
+# density_plot <- ggplot(df, aes(x = nFeature_RNA, color = Sample_ID, fill = Sample_ID)) +
+#   geom_density(alpha = 0.2) +
+#   theme_classic() +
+#   scale_x_log10() +
+#   xlab("nFeature_RNA") +
+#   ylab("Density") +
+#   ggtitle("Density nFeature") +
+#   theme(axis.title.x = element_blank(), # Remove x-axis title for cleaner alignment
+#         axis.text.x = element_blank(),   # Remove x-axis text as boxplot will provide labels
+#         axis.ticks.x = element_blank())  # Remove x-axis ticks
+# 
+# # Calculate summary statistics per Sample_ID
+# summary_stats <- df %>%
+#   group_by(Sample_ID) %>%
+#   summarise(
+#     ymin = min(nFeature_RNA),
+#     ymax = max(nFeature_RNA),
+#     Q1 = quantile(nFeature_RNA, 0.25),
+#     Median = quantile(nFeature_RNA, 0.5),
+#     Q3 = quantile(nFeature_RNA, 0.75),
+#     Mean = mean(nFeature_RNA)
+#   )
+# 
+# # Convert to log10 if your x-axis in the plot is log10
+# summary_stats_log10 <- summary_stats %>%
+#   mutate(across(c(ymin, ymax, Q1, Median, Q3, Mean), ~log10(.x)))
+# # For multiple boxplots:
+# box_plot_multiple <- ggplot(df, aes(x = nFeature_RNA, y = Sample_ID, color = Sample_ID, fill = Sample_ID)) +
+#   geom_boxplot(width = 0.5, alpha = 0.2, outlier.shape = NA) +
+#   theme_classic() +
+#   scale_x_log10() +
+#   ggtitle("Boxplot nFeature") +
+#   xlab("") + # No x-label here
+#   ylab("") + # No y-label here, as it will be provided by the density plot
+#   theme(legend.position = "none",
+#         axis.text.y = element_blank(), # Hide y-axis text to clean up
+#         axis.ticks.y = element_blank(), # Hide y-axis ticks
+#         axis.title.y = element_blank(), # Hide y-axis title
+#         plot.margin = margin(b = 0)) # Reduce bottom margin
+# # For individual boxplots for each Sample_ID, arranged on top:
+# combined_plot <- box_plot_multiple / density_plot + plot_layout(heights = c(2, 3)) # Adjust heights as needed
+# pdf(paste0("../results/density/", projectID,"_nFeature.pdf"),width = 8,height = 8)
+# print(combined_plot)
+# dev.off()
+# 
+# density_plot <- ggplot(df, aes(x = percent.mt, color = Sample_ID, fill = Sample_ID)) +
+#   geom_density(alpha = 0.2) +
+#   theme_classic() +
+#   xlab("percent.mt") +
+#   ylab("Density") +
+#   ggtitle("Density percent.mt") +
+#   theme(axis.title.x = element_blank(), # Remove x-axis title for cleaner alignment
+#         axis.text.x = element_blank(),   # Remove x-axis text as boxplot will provide labels
+#         axis.ticks.x = element_blank())  # Remove x-axis ticks
+# 
+# # Calculate summary statistics per Sample_ID
+# summary_stats <- df %>%
+#   group_by(Sample_ID) %>%
+#   summarise(
+#     ymin = min(percent.mt),
+#     ymax = max(percent.mt),
+#     Q1 = quantile(percent.mt, 0.25),
+#     Median = quantile(percent.mt, 0.5),
+#     Q3 = quantile(percent.mt, 0.75),
+#     Mean = mean(percent.mt)
+#   )
+# # Convert to log10 if your x-axis in the plot is log10
+# summary_stats_log10 <- summary_stats %>%
+#   mutate(across(c(ymin, ymax, Q1, Median, Q3, Mean),))
+# # For multiple boxplots:
+# box_plot_multiple <- ggplot(df, aes(x = percent.mt, y = Sample_ID, color = Sample_ID, fill = Sample_ID)) +
+#   geom_boxplot(width = 0.5, alpha = 0.2, outlier.shape = NA) +
+#   theme_classic() +
+#   ggtitle("Boxplot percent.mt") +
+#   xlab("") + # No x-label here
+#   ylab("") + # No y-label here, as it will be provided by the density plot
+#   theme(legend.position = "none",
+#         axis.text.y = element_blank(), # Hide y-axis text to clean up
+#         axis.ticks.y = element_blank(), # Hide y-axis ticks
+#         axis.title.y = element_blank(), # Hide y-axis title
+#         plot.margin = margin(b = 0)) # Reduce bottom margin
+# # For individual boxplots for each Sample_ID, arranged on top:
+# combined_plot <- box_plot_multiple / density_plot + plot_layout(heights = c(2, 3)) # Adjust heights as needed
+# pdf(paste0("../results/density/", projectID,"_mt.pdf"),width = 8,height = 8)
+# print(combined_plot)
+# dev.off()
+# 
+# ## ----Preprocess_for_integration----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# dataObject[["RNA"]] <- split(dataObject[["RNA"]], f = dataObject$Sample_ID)
+# 
+# # since the data is split into layers, normalization and variable feature identification is performed for each sample independently (a consensus set of variable features is automatically identified).
+# dataObject # inspect
+# # Layers
+# print("Inspect Layers")
+# Layers(dataObject[["RNA"]])
+# 
+# dataObject <- SCTransform(dataObject, verbose = TRUE, conserve.memory = TRUE) # this single command replaces NormalizeData(), ScaleData(), and FindVariableFeatures().
+# print("Insepect SCT")
+# DefaultAssay(dataObject) # inspect
+# saveRDS(dataObject, paste0("../rObjects/",projectID,"_SCTransform_only.rds"), compress = FALSE)
+# 
+# print("Identify the 10 most highly variable genes:")
+# top10 <- head(VariableFeatures(dataObject), 10)
+# top10
+# 
+# dataObject <- RunPCA(dataObject, npcs = 30, verbose = F)
+# dataObject <- RunUMAP(dataObject, dims = 1:30, reduction = "pca", reduction.name = "umap.unintegrated")
+# dataObject <- FindNeighbors(dataObject, dims = 1:30, reduction = "pca", assay = "SCT")
+# dataObject <- FindClusters(dataObject, resolution = 0.6, cluster.name = "unintegrated_clusters")
+# dataObject <- RunUMAP(dataObject, dims = 1:30, reduction = "pca", reduction.name = "umap.unintegrated")
+# projectID <- "CWOW_cellbender_SCTransform_clean"
+# saveRDS(dataObject, paste0("../rObjects/",projectID,".rds"), compress = FALSE)
 
 #--------------------
 print("RPCAIntegration")
+dataObject <- readRDS("../rObjects/CWOW_cellbender_SCTransform_clean.rds")
+
 projectID <- "CWOW_cellbender_RPCAIntegration_clean"
 
 dataObject <- RunPCA(dataObject, npcs = 30, verbose = F)

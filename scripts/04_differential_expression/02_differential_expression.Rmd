@@ -49,10 +49,15 @@ Idents(dataObject) <- factor(dataObject$individual_clusters, levels = unique(dat
 
 levels(Idents(dataObject))
 dot_ind_celltype <- DotPlot(dataObject,
-                            features = markers.to.plot, 
+                            assay = "SCT", 
+                            cols = c("green", "blue", "black"),
+                            dot.min = .25, 
+                            features = genes_markers, 
                             cluster.idents = FALSE,
                             dot.scale = 8) + RotatedAxis()
 dot_ind_celltype
+
+getwd()
 
 pdf(
   paste0(
@@ -65,32 +70,133 @@ dev.off()
 ```
 
 ```{r}
-# dataObject.pcg <- subset(x = dataObject, features = protein_coding_genes$gene_name) #pcg - protein coding genes
+#help(VlnPlot)
+VlnPlot(dataObject,
+        features = c("ERC2"),
+       # stack = TRUE,
+       # flip = TRUE,
+        #split.by = "individual_clusters", 
+        split.by = "group", 
+        split.plot = TRUE, 
+        pt.size = 0.05)
+```
+
+```{r cleanup_rObject}
+meta_cols <- names(dataObject@meta.data)
+cols_to_remove_indices <- grep("^(pANN|DF\\.classifications)", meta_cols)
+cols_to_remove <- meta_cols[cols_to_remove_indices]
+dataObject@meta.data <- dataObject@meta.data[, -cols_to_remove_indices, drop = FALSE]
+
+print(paste("Columns removed:", paste(cols_to_remove, collapse = ", ")))
+print(paste("New number of metadata columns:", ncol(dataObject@meta.data)))
+head(dataObject.PSCT@meta.data) 
+```
+
+# Prepare for differential expression
+```{r prepare}
 dataObject.PSCT <- PrepSCTFindMarkers(dataObject, assay = "SCT", verbose = TRUE)
+table(Idents(dataObject.PSCT)) # number of cells per cell type by group
 
 dataObject.PSCT$celltype_group <- paste(dataObject.PSCT$individual_clusters, dataObject.PSCT$group, sep = "_")
 Idents(dataObject.PSCT) <- "celltype_group"
 
-pcg <- protein_coding_genes$gene_name
-# remove MT genes
-pcg_filtered <- intersect(pcg, rownames(dataObject.PSCT))
+genes_pc <- protein_coding_genes$gene_name
+#  only protein coding genes
+genes_pc_filtered <- intersect(genes_pc, rownames(dataObject.PSCT))
 
-#counts <- dataObject@assays$SCT$counts
+levels(Idents(dataObject.PSCT))
 
-table(Idents(dataObject.PSCT))
-de_interneuron_AD_vs_control <- FindMarkers(dataObject.PSCT, 
-                       ident.1 = "interneuron_AD_AT", ident.2 = "interneuron_CONTROL", 
-                       features = pcg_filtered, 
-                       logfc.threshold = 0.25, 
-                       test.use = "MAST",
-                       min.pct = 0.2, 
-                       latent.vars = c("sex", "age"),
-                       min.cells.group = 100, 
-                       densify = TRUE, 
-                       verbose = TRUE)
-de_interneuron_AD_vs_control$gene <- rownames(de_interneuron_AD_vs_control)
+```
 
-write.table(de_interneuron_AD_vs_control, "de_interneuron_AD_vs_control.txt", sep = "\t", quote = FALSE)
+# Find makers - differential expression 
+```{r}
+comparisons <- list(
+  c("AD_AT", "CONTROL"),
+  c("LBD_S", "CONTROL"),
+  c("LBD_AS", "CONTROL"),
+  c("LBD_ATS", "CONTROL"),
+  c("LBD_S", "AD_AT"),
+  c("LBD_AS", "AD_AT"),
+  c("LBD_ATS", "AD_AT"), 
+  c("LBD_AS", "LBD_S"),
+  c("LBD_ATS", "LBD_S"),
+  c("LBD_ATS", "LBD_AS")
+)
+
+main_output_dir <- "../results/DEGs/"
+# Iterate through Cell Types
+for (cell_type in cell_types) {
+  message(paste("Starting differential expression for cell type:", cell_type))
+  
+  # Create a subdirectory for the current cell type
+  cell_type_dir <- file.path(main_output_dir, cell_type)
+  dir.create(cell_type_dir, showWarnings = FALSE)
+  
+  # Inner Loop: Iterate through Pairwise Comparisons
+  for (comp in comparisons) {
+    pathology_A <- comp[1]
+    pathology_B <- comp[2]
+    
+    # Construct the full identity labels for FindMarkers
+    ident_1_label <- paste0(cell_type, "_", pathology_A)
+    ident_2_label <- paste0(cell_type, "_", pathology_B)
+    
+    message(paste("  Running DE for:", pathology_A, "vs", pathology_B))
+    
+    de_results <- FindMarkers(
+      object = dataObject.PSCT,
+      ident.1 = ident_1_label,
+      ident.2 = ident_2_label,
+      features = genes_pc_filtered,
+      logfc.threshold = 0.25,
+      test.use = "MAST",
+      min.pct = 0.2,
+      latent.vars = c("sex_inferred", "Age"), # Crucial for controlling sex/age variance 
+      min.cells.group = 100,
+      densify = TRUE, # Provides speed benefits for sparse matrices
+      verbose = FALSE # Set to FALSE in a loop for cleaner output
+    )
+    
+    de_results$gene <- rownames(de_results)
+    
+    # Save the results
+    filename <- paste0("DEG_", cell_type, "_", pathology_A, "_vs_", pathology_B, ".txt")
+    write.table(
+      de_results, 
+      file.path(cell_type_dir, filename), 
+      sep = "\t", 
+      quote = FALSE, 
+      row.names = FALSE
+    )
+    message(paste("  --> Saved to:", filename))
+  }
+}
+```
+
+
+
+```{r findMakers_DE}
+#----------
+## DEGs per cell type among the groups
+DEGs <- SeuratWrappers::RunPrestoAll(
+  object = dataObject.prepSCT,
+  features = pcg_filtered, 
+  logfc.threshold = 0.25, 
+  assay = "SCT",
+  slot = "counts",
+  only.pos = FALSE,
+  test.use = "MAST",
+  min.pct = 0.2, # only test genes that are detected in a minimum fraction of min.pct cells in either of the two populations
+  latent.vars = c("sex_inferred", "Age"),
+  min.cells.group = 100,  # minimum number of cells in one of the groups
+  densify = TRUE, # convert the sparse matrix to a dense form before running the DE test. This can provide speedups but might require higher memory
+  verbose = TRUE)
+
+saveRDS(DEGs, paste0("../rObjects/", projectID, "_DEGs.rds"))
+write.table(DEGs, 
+            paste0("../results/DEGs/", projectID, "_DEGs.tsv"),
+            quote = FALSE,
+            row.names = FALSE)
 ```
 
 # DESeq all cell type pseudo-bulk

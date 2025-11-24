@@ -44,9 +44,151 @@ negFC = -.25
 FC = .25
 ```
 
+```{r}
+for (cell_type in cell_types) {
+  
+  for (comp in comparisons) {
+    
+    pathology_A <- comp[1]
+    pathology_B <- comp[2]
+    
+    # Construct the file name based on the specified format
+    file_name <- paste0("DEG_", cell_type, "_", pathology_A, "_vs_", pathology_B, ".txt")
+    file_path <- paste0("../results/DEGs/", file_name)
+    plot_title <- paste0(cell_type, " (", pathology_A, " vs ", pathology_B, ")")
+    output_pdf <- paste0(output_dir, "Volcano_", cell_type, "_", pathology_A, "_vs_", pathology_B, ".pdf")
+    
+    # Check if the file exists before attempting to read
+    if (!file.exists(file_path)) {
+      message(paste("Skipping:", file_name, "- File not found."))
+      next # Move to the next comparison/cell_type
+    }
+    
+    # 1. Read the DEG results
+    data <- read.delim(file_path)
+    data <- na.omit(data) # Ensure no NA rows
+
+    # 2. Check for the required columns (assuming 'gene' column exists)
+    if (!all(c("log2FoldChange", "pvalue", "padj", "gene") %in% colnames(data))) {
+      message(paste("Skipping:", file_name, "- Missing required columns (log2FoldChange, pvalue, padj, or gene)."))
+      next
+    }
+    
+    # --- Volcano Plot Logic (Adapted from your provided code) ---
+    
+    # 3. Determine significance and create a color category column
+    data$color_adjpval_0.05 <- 3 # Default: Non-significant (Gray)
+    
+    # Up-regulated (Red): padj < qval AND log2FoldChange > posFC
+    data$color_adjpval_0.05[data$padj < qval & data$log2FoldChange > posFC] <- 1
+    
+    # Down-regulated (Blue): padj < qval AND log2FoldChange < negFC
+    data$color_adjpval_0.05[data$padj < qval & data$log2FoldChange < negFC] <- 2
+    
+    data$color_adjpval_0.05 <- factor(data$color_adjpval_0.05, 
+                                     levels = c(1, 2, 3), 
+                                     labels = c("Up", "Down", "NS"))
+    
+    
+    # 4. Check for significant DEGs and set plot parameters
+    significant_DEGs <- subset(data, color_adjpval_0.05 %in% c("Up", "Down"))
+    
+    if (nrow(significant_DEGs) == 0) {
+      # No significant DEGs
+      p <- ggplot(data = data, aes(x = log2FoldChange, y = -log10(pvalue))) +
+        geom_point(alpha = 0.8, size = 2, color = "gray") +
+        theme_bw() +
+        theme(legend.position = "none",
+              axis.title.x = element_text(size = 10),
+              axis.text.x = element_text(size = 10),
+              axis.title.y = element_text(size = 10),
+              axis.text.y = element_text(size = 10)) +
+        geom_vline(xintercept = negFC, colour = "#000000", linetype = "dashed") +
+        geom_vline(xintercept = posFC, colour = "#000000", linetype = "dashed") +
+        labs(x = expression(log[2](FC)), y = expression(-log[10] ~ "(" ~ italic("p") ~ "-value)")) +
+        ggtitle(paste0(plot_title, "\nNo significant DEGs found"))
+      
+    } else {
+      # Significant DEGs exist
+      
+      # Select Top Genes for Labeling
+      up_data <- significant_DEGs[significant_DEGs$color_adjpval_0.05 == "Up", ]
+      down_data <- significant_DEGs[significant_DEGs$color_adjpval_0.05 == "Down", ]
+      
+      # Sort by smallest padj (most significant)
+      up_data <- up_data[order(up_data$padj), ]
+      down_data <- down_data[order(down_data$padj), ]
+      
+      # Top 20 most significant in each direction
+      up10 <- head(up_data, 20)
+      down10 <- head(down_data, 20)
+      
+      # Additional highly folded genes (log2FC > 5 or < -5)
+      upFold <- subset(up_data, log2FoldChange > 5)
+      upFold <- upFold[!(upFold$gene %in% up10$gene),] # Remove genes already in top 20
+      upFold <- head(upFold, 10)
+      
+      downFold <- subset(down_data, log2FoldChange < -5)
+      downFold <- downFold[!(downFold$gene %in% down10$gene),] # Remove genes already in top 20
+      downFold <- head(downFold, 10)
+      
+      # Define colors
+      my_colors <- c(
+        "Up" = "red",
+        "Down" = "blue",
+        "NS" = "gray"
+      )
+      
+      # Determine horizontal line for padj = qval
+      hadjpval <- -log10(min(data$pvalue[data$padj < qval], na.rm=TRUE))
+      
+      # --- Plotting ---
+      p <- ggplot(data = data, aes(x = log2FoldChange, y = -log10(pvalue), color = color_adjpval_0.05)) + 
+        geom_point(alpha = 0.8, size = 2) + 
+        theme_bw() + 
+        scale_color_manual(values = my_colors) + 
+        labs(x = expression(log[2](FC)), y = expression(-log[10] ~ "(" ~ italic("p") ~ "-value)")) +
+        theme(legend.position = "none",
+              axis.title.x = element_text(size = 10),
+              axis.text.x = element_text(size = 10),
+              axis.title.y = element_text(size = 10),
+              axis.text.y = element_text(size = 10)) +
+        geom_hline(yintercept = -log10(qval), colour = "darkgray", linetype = "dotted") + # Use -log10(qval) for significance line
+        geom_vline(xintercept = negFC, colour = "#000000", linetype = "dashed") +
+        geom_vline(xintercept = posFC, colour = "#000000", linetype = "dashed") +
+        ggtitle(paste0(plot_title, "\nAdjusted p-value < ", qval," & |log2FC| > ", FC)) +
+        
+        # Labeling significant genes
+        geom_text_repel(data = rbind(up10, upFold),
+                        aes(x = log2FoldChange, y = -log10(pvalue), label = gene), 
+                        color = "maroon", 
+                        fontface = "italic",
+                        max.overlaps = getOption("ggrepel.max.overlaps", default = 10),
+                        size = 3) +
+        geom_text_repel(data = rbind(down10, downFold),
+                        aes(x = log2FoldChange, y = -log10(pvalue), label = gene), 
+                        color = "navyblue", 
+                        fontface = "italic",
+                        max.overlaps = getOption("ggrepel.max.overlaps", default = 10),
+                        size = 3)
+      
+    }
+    
+    # 5. Save the plot
+    pdf(output_pdf, height = 6, width = 6)
+    print(p)
+    dev.off()
+    
+    message(paste("Generated:", basename(output_pdf)))
+  }
+}
+
+message("Volcano plot generation loop complete.")
+```
+
 ### All celltypes together 
 ```{r volcano_group, warning=FALSE}
-groups <- c("AD-AT_vs_CONTROL", "LBD-S_vs_CONTROL", "LBD-AS_vs_CONTROL", "LBD-ATS_vs_CONTROL")
+groups <- c("AD_AT_vs_CONTROL", "LBD_S_vs_CONTROL", "LBD_AS_vs_CONTROL", "LBD_ATS_vs_CONTROL")
 for (i in groups) {
   ind1_vs_ind2 <- read.delim(paste0("../results/DEGs/DEGs_rpca/all_celltypes_", i, "_comparison_pseudobulk.txt"))
   ind1_vs_ind2 <- na.omit(ind1_vs_ind2)
@@ -171,538 +313,6 @@ max <- nrow(ind1_vs_ind2)
                         )
       p
       pdf(paste0("../results/volcanoes/DEGs_rpca/all_celltypes_", i, ".pdf"), height = 7, width = 7)
-      print(p)
-      dev.off()
-    } 
-  }
-}
-```
-
-### LBD-ATS versus CONTROL
-```{r volcano_group, warning=FALSE}
-for (i in cell_types) {
-  ind1_vs_ind2 <- read.delim(paste0("../results/DEGs/DEGs_rpca/", i, "_LBD-ATS_vs_CONTROL_comparison_pseudobulk.txt"))
-  ind1_vs_ind2 <- na.omit(ind1_vs_ind2)
-  if (!any(ind1_vs_ind2$padj < 0.1, na.rm = TRUE)) {
-    # If there are no significant DEGs, create a volcano plot with all points in gray
-    p <- ggplot(data = ind1_vs_ind2, aes(x = log2FoldChange, y = -log10(pvalue))) +
-      geom_point(alpha = 0.8, size = 2, color = "gray") +
-      theme_bw() +
-      theme(legend.position = "none",
-            axis.title.x = element_text(size = 10),
-            axis.text.x = element_text(size = 10),
-            axis.title.y = element_text(size = 10),
-            axis.text.y = element_text(size = 10)) +
-      geom_vline(xintercept = negFC,
-                 colour = "#000000",
-                 linetype = "dashed") +
-      geom_vline(xintercept = posFC,
-                 colour = "#000000",
-                 linetype = "dashed") +
-      labs(x = expression(log[2](FC)),
-           y = expression(-log[10] ~ "(" ~ italic("p") ~ "-value)")) +
-      ggtitle(paste0(i, "\nLBD-ATS versus CONTROL \nNo significant DEGs found"))
-    
-    pdf(paste0("../results/volcanoes/DEGs_rpca/", i, "_LBD-ATS_vs_CONTROL.pdf"), height = 7, width = 7)
-    print(p)
-    dev.off()
-  } else {
-    color_values <- vector()
-max <- nrow(ind1_vs_ind2)
-  for (row in 1:max) {
-    if (!is.na(ind1_vs_ind2$padj[row])) {  # Check for NA values in padj
-      if (ind1_vs_ind2$padj[row] < qval) {
-        if (ind1_vs_ind2$log2FoldChange[row] > posFC) {
-          color_values <- c(color_values, 1)
-        } else if (ind1_vs_ind2$log2FoldChange[row] < negFC) {
-          color_values <- c(color_values, 2)
-        } else {
-          color_values <- c(color_values, 3)
-        }
-      } else {
-        color_values <- c(color_values, 3)
-      }
-    } else {
-      color_values <- c(color_values, 3)  # Handle NA values in padj
-    }
-  }
-  ind1_vs_ind2$color_adjpval_0.05 <- factor(color_values)
-    data <- ind1_vs_ind2
-    num <- subset(data, (padj < qval & log2FoldChange < negFC) | (padj < qval & log2FoldChange > posFC))
-    num <- nrow(num)
-    if(num != 0) {
-    up <- data[data$color_adjpval_0.05 == 1,]
-   # up <- up[!grepl("ENSG", up$gene),]
-    up10 <- up[1:20,]
-    upFold <- subset(up, log2FoldChange > 5)
-    upFold <- upFold[!(upFold$gene %in% up10$gene),]
-    upFold <- upFold[1:10,]
-
-    down <- data[data$color_adjpval_0.05 == 2,]
-   # down <- down[!grepl("ENSG", down$gene),]
-    down10 <- down[1:20,]
-    downFold <- subset(down, log2FoldChange < -5)
-    downFold <- downFold[!(downFold$gene %in% down10$gene),]
-    downFold <- downFold[1:10,]
-
-    if (!1 %in% unique(data$color_adjpval_0.05)) {
-        my_colors <- c("blue","gray")
-      } else if (!2 %in% unique(data$color_adjpval_0.05)) {
-        my_colors <- c("red","gray")
-      } else if (!1 %in% unique(data$color_adjpval_0.05) && !2 %in% unique(data$color_adjpval_0.05)) {
-        my_colors <- c("gray")
-      } else {
-        my_colors <- c("red","blue","gray")
-      }
-      # plot
-      hadjpval <- (-log10(max(data$pvalue[data$padj < qval], na.rm=TRUE)))
-      p <- ggplot(data = data, aes(x = log2FoldChange,y = -log10(pvalue), color = color_adjpval_0.05)) + 
-        geom_point(alpha = 0.8, size = 2) +  
-        theme_bw() +  
-        theme(legend.position = "none") + 
-        scale_color_manual(values = my_colors) + 
-        labs(x = expression(log[2](FC)), 
-          y = expression(-log[10] ~ "(" ~ italic("p") ~ "-value)") ) +
-        theme(legend.position = "none",
-              axis.title.x = element_text(size = 10),
-              axis.text.x = element_text(size = 10),
-              axis.title.y = element_text(size = 10),
-              axis.text.y = element_text(size = 10)) +
-      geom_hline(yintercept = hadjpval,
-                 colour = "#000000",
-                 linetype = "dashed") +
-      geom_vline(xintercept = negFC,
-                 colour = "#000000",
-                 linetype = "dashed") +
-      geom_vline(xintercept = posFC,
-                 colour = "#000000",
-                 linetype = "dashed") +
-      ggtitle(paste0(i, "\nLBD-ATS versus CONTROL \nq-value < ", qval," & |log2FC| > ", FC)) +
-      geom_text_repel(data = up10,
-                        aes(x = log2FoldChange, y= -log10(pvalue), label = gene), 
-                        color = "maroon", 
-                        fontface="italic",
-                        max.overlaps = getOption("ggrepel.max.overlaps", default = 25)
-                        ) +
-      geom_text_repel(data = down10,
-                        aes(x = log2FoldChange, y= -log10(pvalue), label = gene), 
-                        color = "navyblue", 
-                        fontface="italic",
-                        max.overlaps = getOption("ggrepel.max.overlaps", default = 15)
-                        ) +
-      geom_text_repel(data = upFold,
-                        aes(x = log2FoldChange, y= -log10(pvalue), label = gene), 
-                        color = "maroon", 
-                        fontface="italic",
-                        max.overlaps = getOption("ggrepel.max.overlaps", default = 5)
-                        ) +
-      geom_text_repel(data = downFold,
-                        aes(x = log2FoldChange, y= -log10(pvalue), label = gene), 
-                        color = "navyblue", 
-                        fontface="italic",
-                        max.overlaps = getOption("ggrepel.max.overlaps", default = 5)
-                        )
-      p
-      pdf(paste0("../results/volcanoes/DEGs_rpca/", i, "_LBD-ATS_vs_CONTROL.pdf"), height = 7, width = 7)
-      print(p)
-      dev.off()
-    } 
-  }
-}
-```
-
-### LBD-AS versus CONTROL
-```{r volcano_group, warning=FALSE}
-for (i in cell_types) {
-  ind1_vs_ind2 <- read.delim(paste0("../results/DEGs/DEGs_rpca/", i, "_LBD-AS_vs_CONTROL_comparison_pseudobulk.txt"))
-  ind1_vs_ind2 <- na.omit(ind1_vs_ind2)
-  if (!any(ind1_vs_ind2$padj < 0.1, na.rm = TRUE)) {
-    # If there are no significant DEGs, create a volcano plot with all points in gray
-    p <- ggplot(data = ind1_vs_ind2, aes(x = log2FoldChange, y = -log10(pvalue))) +
-      geom_point(alpha = 0.8, size = 2, color = "gray") +
-      theme_bw() +
-      theme(legend.position = "none",
-            axis.title.x = element_text(size = 10),
-            axis.text.x = element_text(size = 10),
-            axis.title.y = element_text(size = 10),
-            axis.text.y = element_text(size = 10)) +
-      geom_vline(xintercept = negFC,
-                 colour = "#000000",
-                 linetype = "dashed") +
-      geom_vline(xintercept = posFC,
-                 colour = "#000000",
-                 linetype = "dashed") +
-      labs(x = expression(log[2](FC)),
-           y = expression(-log[10] ~ "(" ~ italic("p") ~ "-value)")) +
-      ggtitle(paste0(i, "\nLBD-AS versus CONTROL \nNo significant DEGs found"))
-    
-    pdf(paste0("../results/volcanoes/DEGs_rpca/", i, "_LBD-AS_vs_CONTROL.pdf"), height = 7, width = 7)
-    print(p)
-    dev.off()
-  } else {
-    color_values <- vector()
-max <- nrow(ind1_vs_ind2)
-  for (row in 1:max) {
-    if (!is.na(ind1_vs_ind2$padj[row])) {  # Check for NA values in padj
-      if (ind1_vs_ind2$padj[row] < qval) {
-        if (ind1_vs_ind2$log2FoldChange[row] > posFC) {
-          color_values <- c(color_values, 1)
-        } else if (ind1_vs_ind2$log2FoldChange[row] < negFC) {
-          color_values <- c(color_values, 2)
-        } else {
-          color_values <- c(color_values, 3)
-        }
-      } else {
-        color_values <- c(color_values, 3)
-      }
-    } else {
-      color_values <- c(color_values, 3)  # Handle NA values in padj
-    }
-  }
-  ind1_vs_ind2$color_adjpval_0.05 <- factor(color_values)
-    data <- ind1_vs_ind2
-    num <- subset(data, (padj < qval & log2FoldChange < negFC) | (padj < qval & log2FoldChange > posFC))
-    num <- nrow(num)
-    if(num != 0) {
-    up <- data[data$color_adjpval_0.05 == 1,]
-   # up <- up[!grepl("ENSG", up$gene),]
-    up10 <- up[1:20,]
-    upFold <- subset(up, log2FoldChange > 5)
-    upFold <- upFold[!(upFold$gene %in% up10$gene),]
-    upFold <- upFold[1:10,]
-
-    down <- data[data$color_adjpval_0.05 == 2,]
-   # down <- down[!grepl("ENSG", down$gene),]
-    down10 <- down[1:20,]
-    downFold <- subset(down, log2FoldChange < -5)
-    downFold <- downFold[!(downFold$gene %in% down10$gene),]
-    downFold <- downFold[1:10,]
-
-    if (!1 %in% unique(data$color_adjpval_0.05)) {
-        my_colors <- c("blue","gray")
-      } else if (!2 %in% unique(data$color_adjpval_0.05)) {
-        my_colors <- c("red","gray")
-      } else if (!1 %in% unique(data$color_adjpval_0.05) && !2 %in% unique(data$color_adjpval_0.05)) {
-        my_colors <- c("gray")
-      } else {
-        my_colors <- c("red","blue","gray")
-      }
-      # plot
-      hadjpval <- (-log10(max(data$pvalue[data$padj < qval], na.rm=TRUE)))
-      p <- ggplot(data = data, aes(x = log2FoldChange,y = -log10(pvalue), color = color_adjpval_0.05)) + 
-        geom_point(alpha = 0.8, size = 2) +  
-        theme_bw() +  
-        theme(legend.position = "none") + 
-        scale_color_manual(values = my_colors) + 
-        labs(x = expression(log[2](FC)), 
-          y = expression(-log[10] ~ "(" ~ italic("p") ~ "-value)") ) +
-        theme(legend.position = "none",
-              axis.title.x = element_text(size = 10),
-              axis.text.x = element_text(size = 10),
-              axis.title.y = element_text(size = 10),
-              axis.text.y = element_text(size = 10)) +
-      geom_hline(yintercept = hadjpval,
-                 colour = "#000000",
-                 linetype = "dashed") +
-      geom_vline(xintercept = negFC,
-                 colour = "#000000",
-                 linetype = "dashed") +
-      geom_vline(xintercept = posFC,
-                 colour = "#000000",
-                 linetype = "dashed") +
-      ggtitle(paste0(i, "\nLBD-AS versus CONTROL \nq-value < ", qval," & |log2FC| > ", FC)) +
-      geom_text_repel(data = up10,
-                        aes(x = log2FoldChange, y= -log10(pvalue), label = gene), 
-                        color = "maroon", 
-                        fontface="italic",
-                        max.overlaps = getOption("ggrepel.max.overlaps", default = 25)
-                        ) +
-      geom_text_repel(data = down10,
-                        aes(x = log2FoldChange, y= -log10(pvalue), label = gene), 
-                        color = "navyblue", 
-                        fontface="italic",
-                        max.overlaps = getOption("ggrepel.max.overlaps", default = 15)
-                        ) +
-      geom_text_repel(data = upFold,
-                        aes(x = log2FoldChange, y= -log10(pvalue), label = gene), 
-                        color = "maroon", 
-                        fontface="italic",
-                        max.overlaps = getOption("ggrepel.max.overlaps", default = 5)
-                        ) +
-      geom_text_repel(data = downFold,
-                        aes(x = log2FoldChange, y= -log10(pvalue), label = gene), 
-                        color = "navyblue", 
-                        fontface="italic",
-                        max.overlaps = getOption("ggrepel.max.overlaps", default = 5)
-                        )
-      p
-      pdf(paste0("../results/volcanoes/DEGs_rpca/", i, "_LBD-AS_vs_CONTROL.pdf"), height = 7, width = 7)
-      print(p)
-      dev.off()
-    } 
-  }
-}
-```
-
-### LBD-S versus CONTROL
-```{r volcano_group, warning=FALSE}
-for (i in cell_types) {
-  ind1_vs_ind2 <- read.delim(paste0("../results/DEGs/DEGs_rpca/", i, "_LBD-S_vs_CONTROL_comparison_pseudobulk.txt"))
-  ind1_vs_ind2 <- na.omit(ind1_vs_ind2)
-  if (!any(ind1_vs_ind2$padj < 0.1, na.rm = TRUE)) {
-    # If there are no significant DEGs, create a volcano plot with all points in gray
-    p <- ggplot(data = ind1_vs_ind2, aes(x = log2FoldChange, y = -log10(pvalue))) +
-      geom_point(alpha = 0.8, size = 2, color = "gray") +
-      theme_bw() +
-      theme(legend.position = "none",
-            axis.title.x = element_text(size = 10),
-            axis.text.x = element_text(size = 10),
-            axis.title.y = element_text(size = 10),
-            axis.text.y = element_text(size = 10)) +
-      geom_vline(xintercept = negFC,
-                 colour = "#000000",
-                 linetype = "dashed") +
-      geom_vline(xintercept = posFC,
-                 colour = "#000000",
-                 linetype = "dashed") +
-      labs(x = expression(log[2](FC)),
-           y = expression(-log[10] ~ "(" ~ italic("p") ~ "-value)")) +
-      ggtitle(paste0(i, "\nLBD-S versus CONTROL \nNo significant DEGs found"))
-    
-    pdf(paste0("../results/volcanoes/DEGs_rpca/", i, "_LBD-S_vs_CONTROL.pdf"), height = 7, width = 7)
-    print(p)
-    dev.off()
-  } else {
-    color_values <- vector()
-max <- nrow(ind1_vs_ind2)
-  for (row in 1:max) {
-    if (!is.na(ind1_vs_ind2$padj[row])) {  # Check for NA values in padj
-      if (ind1_vs_ind2$padj[row] < qval) {
-        if (ind1_vs_ind2$log2FoldChange[row] > posFC) {
-          color_values <- c(color_values, 1)
-        } else if (ind1_vs_ind2$log2FoldChange[row] < negFC) {
-          color_values <- c(color_values, 2)
-        } else {
-          color_values <- c(color_values, 3)
-        }
-      } else {
-        color_values <- c(color_values, 3)
-      }
-    } else {
-      color_values <- c(color_values, 3)  # Handle NA values in padj
-    }
-  }
-  ind1_vs_ind2$color_adjpval_0.05 <- factor(color_values)
-    data <- ind1_vs_ind2
-    num <- subset(data, (padj < qval & log2FoldChange < negFC) | (padj < qval & log2FoldChange > posFC))
-    num <- nrow(num)
-    if(num != 0) {
-    up <- data[data$color_adjpval_0.05 == 1,]
-   # up <- up[!grepl("ENSG", up$gene),]
-    up10 <- up[1:20,]
-    upFold <- subset(up, log2FoldChange > 5)
-    upFold <- upFold[!(upFold$gene %in% up10$gene),]
-    upFold <- upFold[1:10,]
-
-    down <- data[data$color_adjpval_0.05 == 2,]
-   # down <- down[!grepl("ENSG", down$gene),]
-    down10 <- down[1:20,]
-    downFold <- subset(down, log2FoldChange < -5)
-    downFold <- downFold[!(downFold$gene %in% down10$gene),]
-    downFold <- downFold[1:10,]
-
-    if (!1 %in% unique(data$color_adjpval_0.05)) {
-        my_colors <- c("blue","gray")
-      } else if (!2 %in% unique(data$color_adjpval_0.05)) {
-        my_colors <- c("red","gray")
-      } else if (!1 %in% unique(data$color_adjpval_0.05) && !2 %in% unique(data$color_adjpval_0.05)) {
-        my_colors <- c("gray")
-      } else {
-        my_colors <- c("red","blue","gray")
-      }
-      # plot
-      hadjpval <- (-log10(max(data$pvalue[data$padj < qval], na.rm=TRUE)))
-      p <- ggplot(data = data, aes(x = log2FoldChange,y = -log10(pvalue), color = color_adjpval_0.05)) + 
-        geom_point(alpha = 0.8, size = 2) +  
-        theme_bw() +  
-        theme(legend.position = "none") + 
-        scale_color_manual(values = my_colors) + 
-        labs(x = expression(log[2](FC)), 
-          y = expression(-log[10] ~ "(" ~ italic("p") ~ "-value)") ) +
-        theme(legend.position = "none",
-              axis.title.x = element_text(size = 10),
-              axis.text.x = element_text(size = 10),
-              axis.title.y = element_text(size = 10),
-              axis.text.y = element_text(size = 10)) +
-      geom_hline(yintercept = hadjpval,
-                 colour = "#000000",
-                 linetype = "dashed") +
-      geom_vline(xintercept = negFC,
-                 colour = "#000000",
-                 linetype = "dashed") +
-      geom_vline(xintercept = posFC,
-                 colour = "#000000",
-                 linetype = "dashed") +
-      ggtitle(paste0(i, "\nLBD-S versus CONTROL \nq-value < ", qval," & |log2FC| > ", FC)) +
-      geom_text_repel(data = up10,
-                        aes(x = log2FoldChange, y= -log10(pvalue), label = gene), 
-                        color = "maroon", 
-                        fontface="italic",
-                        max.overlaps = getOption("ggrepel.max.overlaps", default = 25)
-                        ) +
-      geom_text_repel(data = down10,
-                        aes(x = log2FoldChange, y= -log10(pvalue), label = gene), 
-                        color = "navyblue", 
-                        fontface="italic",
-                        max.overlaps = getOption("ggrepel.max.overlaps", default = 15)
-                        ) +
-      geom_text_repel(data = upFold,
-                        aes(x = log2FoldChange, y= -log10(pvalue), label = gene), 
-                        color = "maroon", 
-                        fontface="italic",
-                        max.overlaps = getOption("ggrepel.max.overlaps", default = 5)
-                        ) +
-      geom_text_repel(data = downFold,
-                        aes(x = log2FoldChange, y= -log10(pvalue), label = gene), 
-                        color = "navyblue", 
-                        fontface="italic",
-                        max.overlaps = getOption("ggrepel.max.overlaps", default = 5)
-                        )
-      p
-      pdf(paste0("../results/volcanoes/DEGs_rpca/", i, "_LBD-S_vs_CONTROL.pdf"), height = 7, width = 7)
-      print(p)
-      dev.off()
-    } 
-  }
-}
-```
-
-### AD-AT versus CONTROL
-```{r volcano_group, warning=FALSE}
-for (i in cell_types) {
-  ind1_vs_ind2 <- read.delim(paste0("../results/DEGs/DEGs_rpca/", i, "_AD-AT_vs_CONTROL_comparison_pseudobulk.txt"))
-  ind1_vs_ind2 <- na.omit(ind1_vs_ind2)
-  if (!any(ind1_vs_ind2$padj < 0.1, na.rm = TRUE)) {
-    # If there are no significant DEGs, create a volcano plot with all points in gray
-    p <- ggplot(data = ind1_vs_ind2, aes(x = log2FoldChange, y = -log10(pvalue))) +
-      geom_point(alpha = 0.8, size = 2, color = "gray") +
-      theme_bw() +
-      theme(legend.position = "none",
-            axis.title.x = element_text(size = 10),
-            axis.text.x = element_text(size = 10),
-            axis.title.y = element_text(size = 10),
-            axis.text.y = element_text(size = 10)) +
-      geom_vline(xintercept = negFC,
-                 colour = "#000000",
-                 linetype = "dashed") +
-      geom_vline(xintercept = posFC,
-                 colour = "#000000",
-                 linetype = "dashed") +
-      labs(x = expression(log[2](FC)),
-           y = expression(-log[10] ~ "(" ~ italic("p") ~ "-value)")) +
-      ggtitle(paste0(i, "\nAD-AT versus CONTROL \nNo significant DEGs found"))
-    
-    pdf(paste0("../results/volcanoes/DEGs_rpca/", i, "_AD-AT_vs_CONTROL.pdf"), height = 7, width = 7)
-    print(p)
-    dev.off()
-  } else {
-    color_values <- vector()
-max <- nrow(ind1_vs_ind2)
-  for (row in 1:max) {
-    if (!is.na(ind1_vs_ind2$padj[row])) {  # Check for NA values in padj
-      if (ind1_vs_ind2$padj[row] < qval) {
-        if (ind1_vs_ind2$log2FoldChange[row] > posFC) {
-          color_values <- c(color_values, 1)
-        } else if (ind1_vs_ind2$log2FoldChange[row] < negFC) {
-          color_values <- c(color_values, 2)
-        } else {
-          color_values <- c(color_values, 3)
-        }
-      } else {
-        color_values <- c(color_values, 3)
-      }
-    } else {
-      color_values <- c(color_values, 3)  # Handle NA values in padj
-    }
-  }
-  ind1_vs_ind2$color_adjpval_0.05 <- factor(color_values)
-    data <- ind1_vs_ind2
-    num <- subset(data, (padj < qval & log2FoldChange < negFC) | (padj < qval & log2FoldChange > posFC))
-    num <- nrow(num)
-    if(num != 0) {
-    up <- data[data$color_adjpval_0.05 == 1,]
-   # up <- up[!grepl("ENSG", up$gene),]
-    up10 <- up[1:20,]
-    upFold <- subset(up, log2FoldChange > 5)
-    upFold <- upFold[!(upFold$gene %in% up10$gene),]
-    upFold <- upFold[1:10,]
-
-    down <- data[data$color_adjpval_0.05 == 2,]
-   # down <- down[!grepl("ENSG", down$gene),]
-    down10 <- down[1:20,]
-    downFold <- subset(down, log2FoldChange < -5)
-    downFold <- downFold[!(downFold$gene %in% down10$gene),]
-    downFold <- downFold[1:10,]
-
-    if (!1 %in% unique(data$color_adjpval_0.05)) {
-        my_colors <- c("blue","gray")
-      } else if (!2 %in% unique(data$color_adjpval_0.05)) {
-        my_colors <- c("red","gray")
-      } else if (!1 %in% unique(data$color_adjpval_0.05) && !2 %in% unique(data$color_adjpval_0.05)) {
-        my_colors <- c("gray")
-      } else {
-        my_colors <- c("red","blue","gray")
-      }
-      # plot
-      hadjpval <- (-log10(max(data$pvalue[data$padj < qval], na.rm=TRUE)))
-      p <- ggplot(data = data, aes(x = log2FoldChange,y = -log10(pvalue), color = color_adjpval_0.05)) + 
-        geom_point(alpha = 0.8, size = 2) +  
-        theme_bw() +  
-        theme(legend.position = "none") + 
-        scale_color_manual(values = my_colors) + 
-        labs(x = expression(log[2](FC)), 
-          y = expression(-log[10] ~ "(" ~ italic("p") ~ "-value)") ) +
-        theme(legend.position = "none",
-              axis.title.x = element_text(size = 10),
-              axis.text.x = element_text(size = 10),
-              axis.title.y = element_text(size = 10),
-              axis.text.y = element_text(size = 10)) +
-      geom_hline(yintercept = hadjpval,
-                 colour = "#000000",
-                 linetype = "dashed") +
-      geom_vline(xintercept = negFC,
-                 colour = "#000000",
-                 linetype = "dashed") +
-      geom_vline(xintercept = posFC,
-                 colour = "#000000",
-                 linetype = "dashed") +
-      ggtitle(paste0(i, "\nAD-AT versus CONTROL \nq-value < ", qval," & |log2FC| > ", FC)) +
-      geom_text_repel(data = up10,
-                        aes(x = log2FoldChange, y= -log10(pvalue), label = gene), 
-                        color = "maroon", 
-                        fontface="italic",
-                        max.overlaps = getOption("ggrepel.max.overlaps", default = 25)
-                        ) +
-      geom_text_repel(data = down10,
-                        aes(x = log2FoldChange, y= -log10(pvalue), label = gene), 
-                        color = "navyblue", 
-                        fontface="italic",
-                        max.overlaps = getOption("ggrepel.max.overlaps", default = 15)
-                        ) +
-      geom_text_repel(data = upFold,
-                        aes(x = log2FoldChange, y= -log10(pvalue), label = gene), 
-                        color = "maroon", 
-                        fontface="italic",
-                        max.overlaps = getOption("ggrepel.max.overlaps", default = 5)
-                        ) +
-      geom_text_repel(data = downFold,
-                        aes(x = log2FoldChange, y= -log10(pvalue), label = gene), 
-                        color = "navyblue", 
-                        fontface="italic",
-                        max.overlaps = getOption("ggrepel.max.overlaps", default = 5)
-                        )
-      p
-      pdf(paste0("../results/volcanoes/DEGs_rpca/", i, "_AD-AT_vs_CONTROL.pdf"), height = 7, width = 7)
       print(p)
       dev.off()
     } 
