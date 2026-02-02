@@ -22,4 +22,4 @@ conda activate LBD_sn
 
 #------
 # 3) run snakemake for cellranger and cellbender
-snakemake -s Snakefile -j 40 --nolock --latency-wait 15 --cluster "sbatch --ntasks 1 --cpus-per-task=8 --mem=200000 --gres=gpu:1 -p gpu-a100 --time=8:00:00"
+snakemake -s Snakefile.CellBender -j 40 --nolock --latency-wait 15 --cluster "sbatch --ntasks 1 --cpus-per-task=8 --mem=200000 --gres=gpu:1 -p gpu-a100 --time=8:00:00"
