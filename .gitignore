@@ -5,3 +5,11 @@
 fastq/*
 scripts/01_alignment/slurm*
 scripts/01_alignment/.snakemake/*
+results/*
+rObjects/*
+PRJNA_fastq/*
+cellbender/*
+cellranger/*
+fastq/*
+nuclear_fraction/*
+shiny_apps/*
