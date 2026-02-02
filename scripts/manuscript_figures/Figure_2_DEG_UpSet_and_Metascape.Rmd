@@ -1,0 +1,617 @@
+---
+title: "Untitled"
+output: html_document
+date: "2025-12-02"
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = "/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/scripts/")
+setwd("/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/scripts/")
+```
+
+# Libraris, paths, colors
+```{r echo=FALSE, message=FALSE}
+source(here::here("/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/scripts/", "file_paths_and_colours.R"))
+color.panel <- dittoColors()
+```
+
+```{r}
+comparisons_to_plot <- list(
+  c("AD_AT", "CONTROL"),
+  c("LBD_S", "CONTROL"),
+  c("LBD_AS", "CONTROL"),
+  c("LBD_ATS", "CONTROL")
+)
+cell_types <- order_cell_type
+```
+
+# Neuron
+### UP
+```{r}
+# read in enrichment analysis results
+shared_up_enrich_results <-
+  read.csv("../results/metascape/neuron_up/Enrichment_heatmap/HeatmapSelectedGO.csv")
+shared_up_enrich_results$Description <-
+      gsub(
+       "Diseases of signal transduction by growth factor receptors and second messengers",
+        "Diseases of signal transduction",
+        shared_up_enrich_results$Description
+      )
+shared_up_enrich_results$Description <-
+      gsub(
+       "negative regulation of cellular component organization",
+        "neg reg of cellular component organization",
+        shared_up_enrich_results$Description
+      )
+
+shared_up_enrich_results$Description <- factor(shared_up_enrich_results$Description, levels = shared_up_enrich_results$Description)
+shared_up_enrich_results <- reshape2::melt(shared_up_enrich_results)
+shared_up_enrich_results$variable <-
+      gsub(
+       "X_LogP_AD_AT",
+        "AD_AT",
+        shared_up_enrich_results$variable
+      )
+shared_up_enrich_results$variable <-
+      gsub(
+       "X_LogP_LBD_S",
+        "LBD_S",
+        shared_up_enrich_results$variable
+      )
+shared_up_enrich_results$variable <-
+      gsub(
+       "X_LogP_LBD_AS",
+        "LBD_AS",
+        shared_up_enrich_results$variable
+      )
+shared_up_enrich_results$variable <-
+      gsub(
+       "X_LogP_LBD_ATS",
+        "LBD_ATS",
+        shared_up_enrich_results$variable
+      )
+shared_up_enrich_results$variable <- factor(shared_up_enrich_results$variable, levels = c("AD_AT", "LBD_S", "LBD_AS", "LBD_ATS"))
+# plot - up
+shared_up_enric_heatmap <- 
+  ggplot(shared_up_enrich_results, aes(variable, fct_rev(Description), fill= value)) + 
+  geom_tile() +
+  scale_y_discrete(expand = c(0, 0)) +
+  labs(x = "", y = "") +
+  guides(fill = guide_legend(
+    size = 1,
+    title = expression(log[10] ~ 
+"(" ~ italic("p") ~ "-value)")
+  )) +
+  scale_fill_gradientn(
+    colours = c("#800026FF","#FD8D3CFF", "#FFFFCCFF"),
+    values = scales::rescale(c(-70, -35, -20, -10, -1)), 
+    breaks = c(-70, -35, -20, -10, -1), 
+    guide = "legend",
+    limits = c(-70,-1)
+  ) +  theme_bw() +
+    theme(strip.text = element_text(size = 8), 
+          axis.text.y = element_text(size = 8),
+          axis.text.x = element_text(size = 7, angle = 45, hjust = 1),
+          axis.title.x = element_text(size = 8), 
+          legend.text = element_text(size = 8),
+          legend.title = element_text(size = 8),
+          legend.margin=margin(0,0.5,0,0),
+          legend.box.margin=margin(-10,-2,-10,-7.5), 
+          plot.margin = margin(0.5, 0.2, 0.01, 0.1, "cm"), #t,r,b,l
+          plot.title = element_text(size = 8, margin = margin(.1,.1,.1,0), hjust = 2.25)) 
+# + ggtitle("Up-regulated enrichment summaries")
+
+addSmallLegend <- function(shared_up_enric_heatmap, pointSize = 3, textSize = 6, spaceLegend = .5) {
+    shared_up_enric_heatmap +
+        guides(shape = guide_legend(override.aes = list(size = pointSize)),
+               color = guide_legend(override.aes = list(size = pointSize))) +
+        theme(legend.title = element_text(size = textSize), 
+              legend.position = "none",
+              legend.text  = element_text(size = textSize),
+              legend.key.size = unit(spaceLegend, "lines"))
+}
+# Apply on original plot
+shared_up_enric_heatmap <- addSmallLegend(shared_up_enric_heatmap)
+shared_up_enric_heatmap
+```
+
+### Down
+
+```{r down_heat}
+#--------
+# down
+shared_down_enrich_results <-
+  read.csv("../results/metascape/neuron_down/Enrichment_heatmap/HeatmapSelectedGO.csv")
+shared_down_enrich_results$Description <-
+      gsub(
+       "plasma membrane bounded cell projection assembly",
+        "plasma membrane bounded cell projection",
+        shared_down_enrich_results$Description
+      )
+
+
+shared_down_enrich_results$Description <- factor(shared_down_enrich_results$Description, levels = shared_down_enrich_results$Description)
+shared_down_enrich_results <- reshape2::melt(shared_down_enrich_results)
+shared_down_enrich_results$variable <-
+      gsub(
+       "X_LogP_AD_AT",
+        "AD_AT",
+        shared_down_enrich_results$variable
+      )
+shared_down_enrich_results$variable <-
+      gsub(
+       "X_LogP_LBD_S",
+        "LBD_S",
+        shared_down_enrich_results$variable
+      )
+shared_down_enrich_results$variable <-
+      gsub(
+       "X_LogP_LBD_AS",
+        "LBD_AS",
+        shared_down_enrich_results$variable
+      )
+shared_down_enrich_results$variable <-
+      gsub(
+       "X_LogP_LBD_ATS",
+        "LBD_ATS",
+        shared_down_enrich_results$variable
+      )
+shared_down_enrich_results$variable <- factor(shared_down_enrich_results$variable, levels = c("AD_AT", "LBD_S", "LBD_AS", "LBD_ATS"))
+# plot - down
+shared_down_enric_heatmap <- 
+  ggplot(shared_down_enrich_results, aes(variable, fct_rev(Description), fill= value)) + 
+  geom_tile() +
+  scale_y_discrete(expand = c(0, 0)) +
+  labs(x = "", y = "") +
+  guides(fill = guide_legend(
+    size = 1,
+    title = expression(log[10] ~ 
+"(" ~ italic("p") ~ "-value)")
+  )) +
+  scale_fill_gradientn(
+    colours = c("#800026FF","#FD8D3CFF", "#FFFFCCFF"),
+    values = scales::rescale(c(-70, -35, -20, -10, -1)), 
+    breaks = c(-70, -35, -20, -10, -1), 
+    guide = "legend",
+    limits = c(-70,-1)
+    ) + theme_bw() +
+    theme(strip.text = element_text(size = 8), 
+          axis.text.y = element_text(size = 8),
+          axis.text.x = element_text(size = 7, angle = 45, hjust = 1),
+          axis.title.x = element_text(size = 8), 
+          legend.text = element_text(size = 8),
+          legend.title = element_text(size = 8),
+          legend.margin=margin(0,0.5,0,0),
+          legend.box.margin=margin(-10,-2,-10,-7.5), 
+          plot.margin = margin(0.5, 0.75, 0.01, 0.025, "cm"), #t,r,b,l
+          plot.title = element_text(size = 8, margin = margin(.1,.1,.1,0), hjust = 1.95))
+# + ggtitle("Down-regulated enrichment summaries")
+
+addSmallLegend <- function(shared_down_enric_heatmap, pointSize = 3, textSize = 6, spaceLegend = .5) {
+    shared_down_enric_heatmap +
+        guides(shape = guide_legend(override.aes = list(size = pointSize)),
+               color = guide_legend(override.aes = list(size = pointSize))) +
+        theme(legend.title = element_text(size = textSize), 
+              legend.position = "none",
+              legend.text  = element_text(size = textSize),
+              legend.key.size = unit(spaceLegend, "lines"))
+}
+# Apply on original plot
+shared_down_enric_heatmap <- addSmallLegend(shared_down_enric_heatmap)
+shared_down_enric_heatmap
+```
+# Combined
+```{r}
+row1 <- ggarrange(
+  shared_down_enric_heatmap,
+  shared_up_enric_heatmap,
+  ncol = 2,
+  labels = c("D", "E"), 
+  font.label = list(size = 10)
+)
+row1
+path <- paste0("/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/manuscript_figures/GO_neuron")
+saveToPDF(paste0(path, ".pdf"), width = 7, height = 4.25)
+```
+
+# microglia
+### UP
+```{r}
+# read in enrichment analysis results
+shared_up_enrich_results <-
+  read.csv("../results/metascape/microglia_up/Enrichment_heatmap/HeatmapSelectedGO.csv")
+shared_up_enrich_results$Description <-
+      gsub(
+       "Diseases of signal transduction by growth factor receptors and second messengers",
+        "Diseases of signal transduction",
+        shared_up_enrich_results$Description
+      )
+shared_up_enrich_results$Description <-
+      gsub(
+       "regulation of small GTPase mediated signal transduction",
+        "reg small GTPase mediated signal transduction",
+        shared_up_enrich_results$Description
+      )
+
+shared_up_enrich_results$Description <- factor(shared_up_enrich_results$Description, levels = shared_up_enrich_results$Description)
+shared_up_enrich_results <- reshape2::melt(shared_up_enrich_results)
+shared_up_enrich_results$variable <-
+      gsub(
+       "X_LogP_AD_AT",
+        "AD_AT",
+        shared_up_enrich_results$variable
+      )
+shared_up_enrich_results$variable <-
+      gsub(
+       "X_LogP_LBD_S",
+        "LBD_S",
+        shared_up_enrich_results$variable
+      )
+shared_up_enrich_results$variable <-
+      gsub(
+       "X_LogP_LBD_AS",
+        "LBD_AS",
+        shared_up_enrich_results$variable
+      )
+shared_up_enrich_results$variable <-
+      gsub(
+       "X_LogP_LBD_ATS",
+        "LBD_ATS",
+        shared_up_enrich_results$variable
+      )
+shared_up_enrich_results$variable <- factor(shared_up_enrich_results$variable, levels = c("AD_AT", "LBD_S", "LBD_AS", "LBD_ATS"))
+# plot - up
+shared_up_enric_heatmap <- 
+  ggplot(shared_up_enrich_results, aes(variable, fct_rev(Description), fill= value)) + 
+  geom_tile() +
+  scale_y_discrete(expand = c(0, 0)) +
+  labs(x = "", y = "") +
+  guides(fill = guide_legend(
+    size = 1,
+    title = expression(log[10] ~ 
+"(" ~ italic("p") ~ "-value)")
+  )) +
+  scale_fill_gradientn(
+    colours = c("#800026FF","#FD8D3CFF", "#FFFFCCFF"),
+    values = scales::rescale(c(-25, -10, -1)), 
+    breaks = c(-25, -10, -1), 
+    guide = "legend",
+    limits = c(-25,-1)
+  ) +  theme_bw() +
+    theme(strip.text = element_text(size = 8), 
+          axis.text.y = element_text(size = 8),
+          axis.text.x = element_text(size = 7, angle = 45, hjust = 1),
+          axis.title.x = element_text(size = 8), 
+          legend.text = element_text(size = 8),
+          legend.title = element_text(size = 8),
+          legend.margin=margin(0,0.5,0,0),
+          legend.box.margin=margin(-10,-2,-10,-7.5), 
+          plot.margin = margin(0.5, 0.2, 0.01, 0.2, "cm"), #t,r,b,l
+          plot.title = element_text(size = 8, margin = margin(.1,.1,.1,0), hjust = 2.25)) 
+# + ggtitle("Up-regulated enrichment summaries")
+
+addSmallLegend <- function(shared_up_enric_heatmap, pointSize = 3, textSize = 6, spaceLegend = .5) {
+    shared_up_enric_heatmap +
+        guides(shape = guide_legend(override.aes = list(size = pointSize)),
+               color = guide_legend(override.aes = list(size = pointSize))) +
+        theme(legend.title = element_text(size = textSize), 
+              legend.position = "none",
+              legend.text  = element_text(size = textSize),
+              legend.key.size = unit(spaceLegend, "lines"))
+}
+# Apply on original plot
+shared_up_enric_heatmap <- addSmallLegend(shared_up_enric_heatmap)
+shared_up_enric_heatmap
+```
+
+### Down
+
+```{r down_heat}
+#--------
+# down
+shared_down_enrich_results <-
+  read.csv("../results/metascape/microglia_down/Enrichment_heatmap/HeatmapSelectedGO.csv")
+shared_down_enrich_results$Description <-
+      gsub(
+       "regulation of small GTPase mediated signal transduction",
+        "reg small GTPase mediated signal transduction",
+        shared_down_enrich_results$Description
+      )
+
+shared_down_enrich_results$Description[14]
+shared_down_enrich_results$Description <-
+      gsub(
+       shared_down_enrich_results$Description[12],
+        "reg protein containing complex assembly",
+        shared_down_enrich_results$Description
+      )
+
+shared_down_enrich_results$Description <-
+      gsub(
+       shared_down_enrich_results$Description[14],
+        "enzyme receptor protein signaling",
+        shared_down_enrich_results$Description
+      )
+
+
+shared_down_enrich_results$Description <- factor(shared_down_enrich_results$Description, levels = shared_down_enrich_results$Description)
+shared_down_enrich_results <- reshape2::melt(shared_down_enrich_results)
+shared_down_enrich_results$variable <-
+      gsub(
+       "X_LogP_AD_AT",
+        "AD_AT",
+        shared_down_enrich_results$variable
+      )
+shared_down_enrich_results$variable <-
+      gsub(
+       "X_LogP_LBD_S",
+        "LBD_S",
+        shared_down_enrich_results$variable
+      )
+shared_down_enrich_results$variable <-
+      gsub(
+       "X_LogP_LBD_AS",
+        "LBD_AS",
+        shared_down_enrich_results$variable
+      )
+shared_down_enrich_results$variable <-
+      gsub(
+       "X_LogP_LBD_ATS",
+        "LBD_ATS",
+        shared_down_enrich_results$variable
+      )
+shared_down_enrich_results$variable <- factor(shared_down_enrich_results$variable, levels = c("AD_AT", "LBD_S", "LBD_AS", "LBD_ATS"))
+# plot - down
+shared_down_enric_heatmap <- 
+  ggplot(shared_down_enrich_results, aes(variable, fct_rev(Description), fill= value)) + 
+  geom_tile() +
+  scale_y_discrete(expand = c(0, 0)) +
+  labs(x = "", y = "") +
+  guides(fill = guide_legend(
+    size = 1,
+    title = expression(log[10] ~ 
+"(" ~ italic("p") ~ "-value)")
+  )) +
+  scale_fill_gradientn(
+    colours = c("#800026FF","#FD8D3CFF", "#FFFFCCFF"),
+    values = scales::rescale(c(-25, -10, -1)), 
+    breaks = c(-25, -10, -1), 
+    guide = "legend",
+    limits = c(-25,-1)
+    ) + theme_bw() +
+    theme(strip.text = element_text(size = 8), 
+          axis.text.y = element_text(size = 8),
+          axis.text.x = element_text(size = 7, angle = 45, hjust = 1),
+          axis.title.x = element_text(size = 8), 
+          legend.text = element_text(size = 8),
+          legend.title = element_text(size = 8),
+          legend.margin=margin(0,0.5,0,0),
+          legend.box.margin=margin(-10,-2,-10,-7.5), 
+          plot.margin = margin(0.5, 0.3, 0.01, 0.025, "cm"), #t,r,b,l
+          plot.title = element_text(size = 8, margin = margin(.1,.1,.1,0), hjust = 1.95))
+# + ggtitle("Down-regulated enrichment summaries")
+
+addSmallLegend <- function(shared_down_enric_heatmap, pointSize = 3, textSize = 6, spaceLegend = .5) {
+    shared_down_enric_heatmap +
+        guides(shape = guide_legend(override.aes = list(size = pointSize)),
+               color = guide_legend(override.aes = list(size = pointSize))) +
+        theme(legend.title = element_text(size = textSize), 
+              legend.position = "none",
+              legend.text  = element_text(size = textSize),
+              legend.key.size = unit(spaceLegend, "lines"))
+}
+# Apply on original plot
+shared_down_enric_heatmap <- addSmallLegend(shared_down_enric_heatmap)
+shared_down_enric_heatmap
+```
+# Combined
+```{r}
+row1 <- ggarrange(
+  shared_down_enric_heatmap,
+  shared_up_enric_heatmap,
+  ncol = 2,
+  labels = c("D", "E"), 
+  font.label = list(size = 10)
+)
+row1
+path <- paste0("/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/manuscript_figures/GO_microglia")
+saveToPDF(paste0(path, ".pdf"), width = 7, height = 4.25)
+```
+# interneuron
+### UP
+```{r}
+# read in enrichment analysis results
+shared_up_enrich_results <-
+  read.csv("../results/metascape/interneuron_up/Enrichment_heatmap/HeatmapSelectedGO.csv")
+shared_up_enrich_results$Description <-
+      gsub(
+       "regulation of plasma membrane bounded cell projection organization",
+        "reg plasma membrane bounded cell projection org",
+        shared_up_enrich_results$Description
+      )
+shared_up_enrich_results$Description <-
+      gsub(
+       "negative regulation of cellular component organization",
+        "neg reg of cellular component organization",
+        shared_up_enrich_results$Description
+      )
+
+shared_up_enrich_results$Description <-
+      gsub(
+       "Signaling by Rho GTPases, Miro GTPases and RHOBTB3",
+        "Signaling Rho GTPases, Miro GTPases RHOBTB3",
+        shared_up_enrich_results$Description
+      )
+
+
+shared_up_enrich_results$Description <- factor(shared_up_enrich_results$Description, levels = shared_up_enrich_results$Description)
+shared_up_enrich_results <- reshape2::melt(shared_up_enrich_results)
+shared_up_enrich_results$variable <-
+      gsub(
+       "X_LogP_AD_AT",
+        "AD_AT",
+        shared_up_enrich_results$variable
+      )
+shared_up_enrich_results$variable <-
+      gsub(
+       "X_LogP_LBD_S",
+        "LBD_S",
+        shared_up_enrich_results$variable
+      )
+shared_up_enrich_results$variable <-
+      gsub(
+       "X_LogP_LBD_AS",
+        "LBD_AS",
+        shared_up_enrich_results$variable
+      )
+shared_up_enrich_results$variable <-
+      gsub(
+       "X_LogP_LBD_ATS",
+        "LBD_ATS",
+        shared_up_enrich_results$variable
+      )
+shared_up_enrich_results$variable <- factor(shared_up_enrich_results$variable, levels = c("AD_AT", "LBD_S", "LBD_AS", "LBD_ATS"))
+# plot - up
+shared_up_enric_heatmap <- 
+  ggplot(shared_up_enrich_results, aes(variable, fct_rev(Description), fill= value)) + 
+  geom_tile() +
+  scale_y_discrete(expand = c(0, 0)) +
+  labs(x = "", y = "") +
+  guides(fill = guide_legend(
+    size = 1,
+    title = expression(log[10] ~ 
+"(" ~ italic("p") ~ "-value)")
+  )) +
+  scale_fill_gradientn(
+    colours = c("#800026FF","#FD8D3CFF", "#FFFFCCFF"),
+    values = scales::rescale(c(-40, -20, -10, -1)), 
+    breaks = c(-40 -20, -10, -1), 
+    guide = "legend",
+    limits = c(-40,-1)
+  ) +  theme_bw() +
+    theme(strip.text = element_text(size = 8), 
+          axis.text.y = element_text(size = 8),
+          axis.text.x = element_text(size = 7, angle = 45, hjust = 1),
+          axis.title.x = element_text(size = 8), 
+          legend.text = element_text(size = 8),
+          legend.title = element_text(size = 8),
+          legend.margin=margin(0,0.5,0,0),
+          legend.box.margin=margin(-10,-2,-10,-7.5), 
+          plot.margin = margin(0.5, 0.2, 0.01, 0.1, "cm"), #t,r,b,l
+          plot.title = element_text(size = 8, margin = margin(.1,.1,.1,0), hjust = 2.25)) 
+# + ggtitle("Up-regulated enrichment summaries")
+
+addSmallLegend <- function(shared_up_enric_heatmap, pointSize = 3, textSize = 6, spaceLegend = .5) {
+    shared_up_enric_heatmap +
+        guides(shape = guide_legend(override.aes = list(size = pointSize)),
+               color = guide_legend(override.aes = list(size = pointSize))) +
+        theme(legend.title = element_text(size = textSize), 
+              legend.position = "none",
+              legend.text  = element_text(size = textSize),
+              legend.key.size = unit(spaceLegend, "lines"))
+}
+# Apply on original plot
+shared_up_enric_heatmap <- addSmallLegend(shared_up_enric_heatmap)
+shared_up_enric_heatmap
+```
+
+### Down
+
+```{r down_heat}
+#--------
+# down
+shared_down_enrich_results <-
+  read.csv("../results/metascape/interneuron_down/Enrichment_heatmap/HeatmapSelectedGO.csv")
+shared_down_enrich_results$Description <-
+      gsub(
+       "plasma membrane bounded cell projection assembly",
+        "plasma membrane bounded cell projection",
+        shared_down_enrich_results$Description
+      )
+
+
+shared_down_enrich_results$Description <- factor(shared_down_enrich_results$Description, levels = shared_down_enrich_results$Description)
+shared_down_enrich_results <- reshape2::melt(shared_down_enrich_results)
+shared_down_enrich_results$variable <-
+      gsub(
+       "X_LogP_AD_AT",
+        "AD_AT",
+        shared_down_enrich_results$variable
+      )
+shared_down_enrich_results$variable <-
+      gsub(
+       "X_LogP_LBD_S",
+        "LBD_S",
+        shared_down_enrich_results$variable
+      )
+shared_down_enrich_results$variable <-
+      gsub(
+       "X_LogP_LBD_AS",
+        "LBD_AS",
+        shared_down_enrich_results$variable
+      )
+shared_down_enrich_results$variable <-
+      gsub(
+       "X_LogP_LBD_ATS",
+        "LBD_ATS",
+        shared_down_enrich_results$variable
+      )
+shared_down_enrich_results$variable <- factor(shared_down_enrich_results$variable, levels = c("AD_AT", "LBD_S", "LBD_AS", "LBD_ATS"))
+# plot - down
+shared_down_enric_heatmap <- 
+  ggplot(shared_down_enrich_results, aes(variable, fct_rev(Description), fill= value)) + 
+  geom_tile() +
+  scale_y_discrete(expand = c(0, 0)) +
+  labs(x = "", y = "") +
+  guides(fill = guide_legend(
+    size = 1,
+    title = expression(log[10] ~ 
+"(" ~ italic("p") ~ "-value)")
+  )) +
+  scale_fill_gradientn(
+    colours = c("#800026FF","#FD8D3CFF", "#FFFFCCFF"),
+    values = scales::rescale(c(-40,-20, -10, -1)), 
+    breaks = c(-40, -20, -10, -1), 
+    guide = "legend",
+    limits = c(-40,-1)
+    ) + theme_bw() +
+    theme(strip.text = element_text(size = 8), 
+          axis.text.y = element_text(size = 8),
+          axis.text.x = element_text(size = 7, angle = 45, hjust = 1),
+          axis.title.x = element_text(size = 8), 
+          legend.text = element_text(size = 8),
+          legend.title = element_text(size = 8),
+          legend.margin=margin(0,0.5,0,0),
+          legend.box.margin=margin(-10,-2,-10,-7.5), 
+          plot.margin = margin(0.5, 0.75, 0.01, 0.025, "cm"), #t,r,b,l
+          plot.title = element_text(size = 8, margin = margin(.1,.1,.1,0), hjust = 1.95))
+# + ggtitle("Down-regulated enrichment summaries")
+
+addSmallLegend <- function(shared_down_enric_heatmap, pointSize = 3, textSize = 6, spaceLegend = .5) {
+    shared_down_enric_heatmap +
+        guides(shape = guide_legend(override.aes = list(size = pointSize)),
+               color = guide_legend(override.aes = list(size = pointSize))) +
+        theme(legend.title = element_text(size = textSize), 
+              legend.position = "right",
+              legend.text  = element_text(size = textSize),
+              legend.key.size = unit(spaceLegend, "lines"))
+}
+# Apply on original plot
+shared_down_enric_heatmap <- addSmallLegend(shared_down_enric_heatmap)
+shared_down_enric_heatmap
+```
+
+# Combined
+```{r}
+row1 <- ggarrange(
+  shared_down_enric_heatmap,
+  shared_up_enric_heatmap,
+  ncol = 2,
+  labels = c("D", "E"), 
+  font.label = list(size = 10)
+)
+row1
+path <- paste0("/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/manuscript_figures/GO_interneuron")
+saveToPDF(paste0(path, ".pdf"), width = 7, height = 4.25)
+```

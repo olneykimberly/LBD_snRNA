@@ -1,0 +1,806 @@
+---
+title: "DEG excel tables and volcano plots"
+author: "Kimberly Olney, PhD"
+date: "03/11/2025"
+output:
+  html_document:
+    theme: cerulean
+    toc: true
+    toc_float: true
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = "/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/scripts/")
+setwd("/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/scripts/")
+```
+
+# Libraris, paths, colors
+```{r echo=FALSE, message=FALSE}
+source("file_paths_and_colours.R")
+# Load object
+project_ID <- "CWOW_cellbender"
+#dataObject <- readRDS(paste0("../rObjects/", project_ID, "_filtered_subclusters_pass2.rds"))
+#DefaultAssay(dataObject) <- "RNA"
+# List of cell types to analyze
+#cell_types <- c(unique(dataObject$cell_type))
+cell_types <- c("neuron", "interneuron", "oligodendrocyte", "opc", "astrocyte", "microglia", "endothelial", "fibroblast", "mural")
+```
+
+# Volcano plot
+```{r volcano_set_up}
+# Set up
+qval = 0.05
+posFC = .25
+negFC = -.25
+FC = .25
+
+comparisons <- list(
+  c("AD_AT_female", "CONTROL_female"),
+  c("LBD_S_female", "CONTROL_female"),
+  c("LBD_AS_female", "CONTROL_female"),
+  c("LBD_ATS_female", "CONTROL_female"),
+  c("LBD_S_female", "AD_AT_female"),
+  c("LBD_AS_female", "AD_AT_female"),
+  c("LBD_ATS_female", "AD_AT_female"),
+  c("LBD_AS_female", "LBD_S_female"),
+  c("LBD_ATS_female", "LBD_S_female"),
+  c("LBD_ATS_female", "LBD_AS_female"),
+  
+  c("AD_AT_male", "CONTROL_male"),
+  c("LBD_S_male", "CONTROL_male"),
+  c("LBD_AS_male", "CONTROL_male"),
+  c("LBD_ATS_male", "CONTROL_male"),
+  c("LBD_S_male", "AD_AT_male"),
+  c("LBD_AS_male", "AD_AT_male"),
+  c("LBD_ATS_male", "AD_AT_male"),
+  c("LBD_AS_male", "LBD_S_male"),
+  c("LBD_ATS_male", "LBD_S_male"),
+  c("LBD_ATS_male", "LBD_AS_male")
+)
+
+output_dir <- "../results/volcanoes_MAST_by_sex/"
+```
+
+# For loop to read in DEG MAST tables 
+```{r}
+for (cell_type in cell_types) {
+  
+  for (comp in comparisons) {
+    
+    pathology_A <- comp[1]
+    pathology_B <- comp[2]
+    
+    # Construct the file name based on the specified format
+    file_name <- paste0(cell_type,"/DEG_", cell_type, "_", pathology_A, "_vs_", pathology_B, ".tsv")
+    file_path <- paste0("../results/DEGs_RNA_pct0.25_by_sex/", file_name)
+    plot_title <- paste0(cell_type, " (", pathology_A, " vs ", pathology_B, ")")
+    output_pdf <- paste0("../results/volcanoes_MAST_by_sex/", cell_type, "_", pathology_A, "_vs_", pathology_B, ".pdf")
+    
+    # Check if the file exists before attempting to read
+    if (!file.exists(file_path)) {
+      message(paste("Skipping:", file_name, "- File not found."))
+      next # Move to the next comparison/cell_type
+    }
+    
+    # 1. Read the DEG results
+    data <- read.delim(file_path)
+    data <- na.omit(data) # Ensure no NA rows
+
+    # 2. Check for the required columns (assuming 'gene' column exists) # p_val	avg_log2FC	pct.1	pct.2	p_val_adj	gene
+    if (!all(c("avg_log2FC", "p_val", "p_val_adj", "gene") %in% colnames(data))) {
+      message(paste("Skipping:", file_name, "- Missing required columns (avg_log2FC, p_val, p_val_adj, or gene)."))
+      next
+    }
+    
+    # --- Volcano Plot Logic (Adapted from your provided code) ---
+    
+    # 3. Determine significance and create a color category column
+    data$color_adjpval_0.05 <- 3 # Default: Non-significant (Gray)
+    
+    # Up-regulated (Red): p_val_adj < qval AND avg_log2FC > posFC
+    data$color_adjpval_0.05[data$p_val_adj < qval & data$avg_log2FC > posFC] <- 1
+    
+    # Down-regulated (Blue): p_val_adj < qval AND avg_log2FC < negFC
+    data$color_adjpval_0.05[data$p_val_adj < qval & data$avg_log2FC < negFC] <- 2
+    
+    data$color_adjpval_0.05 <- factor(data$color_adjpval_0.05, 
+                                     levels = c(1, 2, 3), 
+                                     labels = c("Up", "Down", "NS"))
+    
+    
+    # 4. Check for significant DEGs and set plot parameters
+    significant_DEGs <- subset(data, color_adjpval_0.05 %in% c("Up", "Down"))
+    
+    if (nrow(significant_DEGs) == 0) {
+      # No significant DEGs
+      p <- ggplot(data = data, aes(x = avg_log2FC, y = -log10(p_val))) +
+        geom_point(alpha = 0.8, size = 2, color = "gray") +
+        theme_bw() +
+        theme(legend.position = "none",
+              axis.title.x = element_text(size = 10),
+              axis.text.x = element_text(size = 10),
+              axis.title.y = element_text(size = 10),
+              axis.text.y = element_text(size = 10)) +
+        geom_vline(xintercept = negFC, colour = "#000000", linetype = "dashed") +
+        geom_vline(xintercept = posFC, colour = "#000000", linetype = "dashed") +
+        labs(x = expression(log[2](FC)), y = expression(-log[10] ~ "(" ~ italic("p") ~ "-value)")) +
+        ggtitle(paste0(plot_title, "\nNo significant DEGs found"))
+      
+    } else {
+      # Significant DEGs exist
+      
+      # Select Top Genes for Labeling
+      up_data <- significant_DEGs[significant_DEGs$color_adjpval_0.05 == "Up", ]
+      down_data <- significant_DEGs[significant_DEGs$color_adjpval_0.05 == "Down", ]
+      
+      # Sort by smallest p_val_adj (most significant)
+      up_data <- up_data[order(up_data$p_val_adj), ]
+      down_data <- down_data[order(down_data$p_val_adj), ]
+      
+      # Top 20 most significant in each direction
+      up10 <- head(up_data, 20)
+      down10 <- head(down_data, 20)
+      
+      # Additional highly folded genes (log2FC > 5 or < -5)
+      upFold <- subset(up_data, avg_log2FC > 5)
+      upFold <- upFold[!(upFold$gene %in% up10$gene),] # Remove genes already in top 20
+      upFold <- head(upFold, 10)
+      
+      downFold <- subset(down_data, avg_log2FC < -5)
+      downFold <- downFold[!(downFold$gene %in% down10$gene),] # Remove genes already in top 20
+      downFold <- head(downFold, 10)
+      
+      # Define colors
+      my_colors <- c(
+        "Up" = "red",
+        "Down" = "blue",
+        "NS" = "gray"
+      )
+      
+      # Determine horizontal line for p_val_adj = qval
+      hadjpval <- -log10(min(data$p_val[data$p_val_adj < qval], na.rm=TRUE))
+      
+      # --- Plotting ---
+      p <- ggplot(data = data, aes(x = avg_log2FC, y = -log10(p_val), color = color_adjpval_0.05)) + 
+        geom_point(alpha = 0.8, size = 2) + 
+        theme_bw() + 
+        scale_color_manual(values = my_colors) + 
+        labs(x = expression(log[2](FC)), y = expression(-log[10] ~ "(" ~ italic("p") ~ "-value)")) +
+        theme(legend.position = "none",
+              axis.title.x = element_text(size = 10),
+              axis.text.x = element_text(size = 10),
+              axis.title.y = element_text(size = 10),
+              axis.text.y = element_text(size = 10)) +
+        geom_hline(yintercept = -log10(qval), colour = "darkgray", linetype = "dotted") + # Use -log10(qval) for significance line
+        geom_vline(xintercept = negFC, colour = "#000000", linetype = "dashed") +
+        geom_vline(xintercept = posFC, colour = "#000000", linetype = "dashed") +
+        ggtitle(paste0(plot_title, "\nAdjusted p-value < ", qval," & |log2FC| > ", FC)) +
+        
+        # Labeling significant genes
+        geom_text_repel(data = rbind(up10, upFold),
+                        aes(x = avg_log2FC, y = -log10(p_val), label = gene), 
+                        color = "maroon", 
+                        fontface = "italic",
+                        max.overlaps = getOption("ggrepel.max.overlaps", default = 10),
+                        size = 3) +
+        geom_text_repel(data = rbind(down10, downFold),
+                        aes(x = avg_log2FC, y = -log10(p_val), label = gene), 
+                        color = "navyblue", 
+                        fontface = "italic",
+                        max.overlaps = getOption("ggrepel.max.overlaps", default = 10),
+                        size = 3)
+      
+    }
+    
+    # 5. Save the plot
+    pdf(output_pdf, height = 6, width = 6)
+    print(p)
+    dev.off()
+    
+    message(paste("Generated:", basename(output_pdf)))
+  }
+}
+
+message("Volcano plot generation loop complete.")
+```
+
+
+# Make excel tables 
+```{r}
+# Loop through each comparison pair
+for (comp in comparisons) {
+  
+  # Construct the comparison string (e.g., "AD_AT_vs_CONTROL")
+  comp_name <- paste0(comp[1], "_vs_", comp[2])
+  message("Processing: ", comp_name)
+  
+  # Create a temporary list to hold dataframes for this specific comparison
+  list_of_datasets <- list()
+  
+  for (cell in cell_types) {
+    # Construct the file path dynamically
+    filepath <- paste0("../results/DEGs_RNA_pct0.25_by_sex/", cell, 
+                       "/DEG_", cell, "_", comp_name, ".tsv")
+    
+    # Check if file exists before trying to read (prevents crashes if a comparison is missing)
+    if (file.exists(filepath)) {
+      list_of_datasets[[cell]] <- read.delim(filepath, header = TRUE, sep = "\t", stringsAsFactors = FALSE)
+    } else {
+      warning("File not found: ", filepath)
+    }
+  }
+  
+  # Save the current comparison's list to its own Excel file
+  if (length(list_of_datasets) > 0) {
+    output_file <- paste0("../results/DEGs_RNA_pct0.25_by_sex/", comp_name, ".xlsx")
+    write.xlsx(list_of_datasets, file = output_file)
+  }
+}
+```
+
+
+# Disease versus control all volcaneos
+```{r}
+# 1. Force the cell_types vector to follow your specific levels
+ordered_levels <- c("neuron", "interneuron", "oligodendrocyte", "opc", 
+                    "astrocyte", "microglia", "mural", "fibroblast", "endothelial")
+
+# Update the variable you are looping over
+cell_types <- factor(cell_types, levels = ordered_levels)
+cell_types <- sort(cell_types)
+# Load necessary libraries for plotting and layout
+library(ggplot2)
+library(ggrepel)
+library(patchwork)
+
+# -----------------
+# 1. Setup Parameters (from volcano_set_up)
+# -----------------
+
+qval <- 0.05
+posFC <- 0.25
+negFC <- -0.25
+FC <- 0.25
+
+# Keep order of comparisons
+comparisons <- list(
+  c("AD_AT_male", "CONTROL_male"),
+  c("LBD_S_male", "CONTROL_male"),
+  c("LBD_AS_male", "CONTROL_male"),
+  c("LBD_ATS_male", "CONTROL_male"))
+
+output_dir <- "../results/DEGs_RNA_pct0.25_by_sex/"
+final_volcano_dir <- "../results/volcanoes_MAST_by_sex/"
+
+# -----------------
+# 2. Plot Generation and Collection Loop
+# -----------------
+
+# List to store all generated plots for patchwork (in order of rows/columns)
+all_plots <- list()
+dir.create(final_volcano_dir, recursive = TRUE, showWarnings = FALSE)
+
+for (cell_type in cell_types) {
+  
+  # Initialize a list for the plots in the current row (cell type)
+  cell_type_plots <- list()
+  
+  for (comp in comparisons) {
+    
+    pathology_A <- comp[1]
+    pathology_B <- comp[2]
+    
+    # Construct the file name and path
+    file_name <- paste0(cell_type,"/DEG_", cell_type, "_", pathology_A, "_vs_", pathology_B, ".tsv")
+    file_path <- paste0("../results/DEGs_RNA_pct0.25_by_sex/", file_name)
+    plot_title <- paste0(cell_type, " (", pathology_A, " vs ", pathology_B, ")")
+    
+    # Check if the file exists before attempting to read
+    if (!file.exists(file_path)) {
+      message(paste("Skipping:", file_name, "- File not found. Creating placeholder plot."))
+      # Create a placeholder plot for missing data to maintain the grid structure
+      p <- ggplot() + 
+        geom_text(aes(x=0, y=0, label=paste0(plot_title, "\nData not found")), size=4) + 
+        theme_void()
+      
+      # Store the placeholder plot
+      cell_type_plots[[paste(pathology_A, "vs", pathology_B)]] <- p
+      next # Move to the next comparison
+    }
+    
+    # 1. Read the DEG results
+    data <- read.delim(file_path)
+    data <- na.omit(data) # Ensure no NA rows
+
+    # 2. Check for the required columns
+    if (!all(c("avg_log2FC", "p_val", "p_val_adj", "gene") %in% colnames(data))) {
+      message(paste("Skipping:", file_name, "- Missing required columns. Creating placeholder plot."))
+      p <- ggplot() + 
+        geom_text(aes(x=0, y=0, label=paste0(plot_title, "\nMissing Columns")), size=4) + 
+        theme_void()
+      
+      # Store the placeholder plot
+      cell_type_plots[[paste(pathology_A, "vs", pathology_B)]] <- p
+      next
+    }
+    
+    # --- Volcano Plot Logic (Adapted for Multi-Panel) ---
+    
+    # 3. Determine significance and create a color category column
+    data$color_adjpval_0.05 <- "NS" # Default: Non-significant (Gray)
+    data$color_adjpval_0.05[data$p_val_adj < qval & data$avg_log2FC > posFC] <- "Up"
+    data$color_adjpval_0.05[data$p_val_adj < qval & data$avg_log2FC < negFC] <- "Down"
+    data$color_adjpval_0.05 <- factor(data$color_adjpval_0.05, 
+                                     levels = c("Up", "Down", "NS"))
+    
+    # 4. Check for significant DEGs and set plot parameters
+    significant_DEGs <- subset(data, color_adjpval_0.05 %in% c("Up", "Down"))
+    
+    if (nrow(significant_DEGs) == 0) {
+      # No significant DEGs
+      p <- ggplot(data = data, aes(x = avg_log2FC, y = -log10(p_val))) +
+        geom_point(alpha = 0.8, size = 1.0, color = "gray") + # Reduced size
+        theme_bw(base_size = 8) + # Smaller base font
+        theme(legend.position = "none",
+              plot.title = element_text(size = 8, hjust = 0.5), # Smaller title
+              axis.title = element_text(size = 8),
+              axis.text = element_text(size = 7)) +
+        geom_vline(xintercept = negFC, colour = "#000000", linetype = "dashed") +
+        geom_vline(xintercept = posFC, colour = "#000000", linetype = "dashed") +
+        labs(x = expression(log[2](FC)), y = expression(-log[10] ~ "(" ~ italic("p") ~ "-value)")) +
+        ggtitle(paste0(plot_title, "\nNo significant DEGs found"))
+      
+    } else {
+      # Significant DEGs exist
+      
+      # Select Top Genes for Labeling (Reduced count for space in multi-panel)
+      up_data <- significant_DEGs[significant_DEGs$color_adjpval_0.05 == "Up", ]
+      down_data <- significant_DEGs[significant_DEGs$color_adjpval_0.05 == "Down", ]
+      up_data <- up_data[order(up_data$p_val_adj), ]
+      down_data <- down_data[order(down_data$p_val_adj), ]
+      
+      # Top 10 most significant in each direction, plus 5 highly folded (for labeling)
+      up_top <- head(up_data, 10)
+      down_top <- head(down_data, 10)
+      
+      up_fold <- subset(up_data, avg_log2FC > 5)
+      up_fold <- up_fold[!(up_fold$gene %in% up_top$gene),]
+      up_fold <- head(up_fold, 5)
+      
+      down_fold <- subset(down_data, avg_log2FC < -5)
+      down_fold <- down_fold[!(down_fold$gene %in% down_top$gene),]
+      down_fold <- head(down_fold, 5)
+      
+      labeled_genes <- unique(rbind(up_top, up_fold, down_top, down_fold))
+      
+      # Define colors
+      my_colors <- c("Up" = "red", "Down" = "blue", "NS" = "gray")
+      
+      # --- Plotting ---
+      p <- ggplot(data = data, aes(x = avg_log2FC, y = -log10(p_val), color = color_adjpval_0.05)) + 
+        geom_point(alpha = 0.8, size = 1.0) + # Reduced size
+        theme_bw(base_size = 8) + # Smaller base font
+        scale_color_manual(values = my_colors) + 
+        labs(x = expression(log[2](FC)), y = expression(-log[10] ~ "(" ~ italic("p") ~ "-value)")) +
+        theme(legend.position = "none",
+              plot.title = element_text(size = 8, hjust = 0.5), # Smaller title
+              axis.title = element_text(size = 8),
+              axis.text = element_text(size = 7)) +
+      #  geom_hline(yintercept = -log10(qval), colour = "darkgray", linetype = "dotted") +
+        geom_vline(xintercept = negFC, colour = "#000000", linetype = "dashed") +
+        geom_vline(xintercept = posFC, colour = "#000000", linetype = "dashed") +
+        ggtitle(paste0(plot_title, "\nAdj. p < ", qval," & |log2FC| > ", FC)) +
+        
+        # Labeling significant genes
+        geom_text_repel(data = labeled_genes,
+                        aes(x = avg_log2FC, y = -log10(p_val), label = gene), 
+                        color = ifelse(labeled_genes$color_adjpval_0.05 == "Up", "maroon", "navyblue"), 
+                        fontface = "italic",
+                        max.overlaps = getOption("ggrepel.max.overlaps", default = 5), # Reduced for multi-panel
+                        size = 2) # Reduced size
+      
+    }
+    
+    # Store the generated plot for this cell type and comparison
+    # This ensures the order of comparisons is preserved within the cell type row
+    cell_type_plots[[paste(pathology_A, "vs", pathology_B)]] <- p
+  }
+  
+  # Append the list of comparison plots for the current cell type to the main list
+  all_plots[[cell_type]] <- cell_type_plots
+}
+
+message("Volcano plot generation and collection complete.")
+
+# -----------------
+# 3. Combine and Save the Final Plot (8 rows x 4 columns)
+# -----------------
+
+# Unlist all plots in the desired order (row by row)
+plot_list <- unlist(all_plots, recursive = FALSE)
+
+# Use patchwork::wrap_plots to arrange them in 8 rows and 4 columns
+# ncol=4 ensures 4 comparisons per row. nrow=8 is implicit.
+final_combined_plot <- wrap_plots(plot_list, ncol = length(comparisons))
+
+# Set the output file path
+final_output_pdf <- paste0(final_volcano_dir, "disease_vs_control_combined_cell_type_volcano_plots_male.pdf")
+
+# Save the final combined plot. We need a large size for 32 plots.
+# 4 plots wide * 4 inches/plot = 16 inches
+# 8 plots high * 4 inches/plot = 32 inches
+ggsave(
+  final_output_pdf, 
+  plot = final_combined_plot, 
+  width = 16, 
+  height = 32, 
+  units = "in", 
+  limitsize = FALSE # Allow large file size
+)
+
+message(paste("Final combined plot (8 rows x 4 columns) saved to:", final_output_pdf))
+```
+
+# LBD vs AD
+```{r}
+# Keep order of comparisons
+comparisons <- list(
+  c("LBD_S_female", "AD_AT_female"),
+  c("LBD_AS_female", "AD_AT_female"),
+  c("LBD_ATS_female", "AD_AT_female")
+)
+
+output_dir <- "../results/DEGs_RNA_pct0.25_by_sex/"
+final_volcano_dir <- "../results/volcanoes_MAST_by_sex/"
+
+# -----------------
+# 2. Plot Generation and Collection Loop
+# -----------------
+
+# List to store all generated plots for patchwork (in order of rows/columns)
+all_plots <- list()
+dir.create(final_volcano_dir, recursive = TRUE, showWarnings = FALSE)
+
+for (cell_type in cell_types) {
+  
+  # Initialize a list for the plots in the current row (cell type)
+  cell_type_plots <- list()
+  
+  for (comp in comparisons) {
+    
+    pathology_A <- comp[1]
+    pathology_B <- comp[2]
+    
+    # Construct the file name and path
+    file_name <- paste0(cell_type,"/DEG_", cell_type, "_", pathology_A, "_vs_", pathology_B, ".tsv")
+    file_path <- paste0("../results/DEGs_RNA_pct0.25_by_sex/", file_name)
+    plot_title <- paste0(cell_type, " (", pathology_A, " vs ", pathology_B, ")")
+    
+    # Check if the file exists before attempting to read
+    if (!file.exists(file_path)) {
+      message(paste("Skipping:", file_name, "- File not found. Creating placeholder plot."))
+      # Create a placeholder plot for missing data to maintain the grid structure
+      p <- ggplot() + 
+        geom_text(aes(x=0, y=0, label=paste0(plot_title, "\nData not found")), size=4) + 
+        theme_void()
+      
+      # Store the placeholder plot
+      cell_type_plots[[paste(pathology_A, "vs", pathology_B)]] <- p
+      next # Move to the next comparison
+    }
+    
+    # 1. Read the DEG results
+    data <- read.delim(file_path)
+    data <- na.omit(data) # Ensure no NA rows
+
+    # 2. Check for the required columns
+    if (!all(c("avg_log2FC", "p_val", "p_val_adj", "gene") %in% colnames(data))) {
+      message(paste("Skipping:", file_name, "- Missing required columns. Creating placeholder plot."))
+      p <- ggplot() + 
+        geom_text(aes(x=0, y=0, label=paste0(plot_title, "\nMissing Columns")), size=4) + 
+        theme_void()
+      
+      # Store the placeholder plot
+      cell_type_plots[[paste(pathology_A, "vs", pathology_B)]] <- p
+      next
+    }
+    
+    # --- Volcano Plot Logic (Adapted for Multi-Panel) ---
+    
+    # 3. Determine significance and create a color category column
+    data$color_adjpval_0.05 <- "NS" # Default: Non-significant (Gray)
+    data$color_adjpval_0.05[data$p_val_adj < qval & data$avg_log2FC > posFC] <- "Up"
+    data$color_adjpval_0.05[data$p_val_adj < qval & data$avg_log2FC < negFC] <- "Down"
+    data$color_adjpval_0.05 <- factor(data$color_adjpval_0.05, 
+                                     levels = c("Up", "Down", "NS"))
+    
+    # 4. Check for significant DEGs and set plot parameters
+    significant_DEGs <- subset(data, color_adjpval_0.05 %in% c("Up", "Down"))
+    
+    if (nrow(significant_DEGs) == 0) {
+      # No significant DEGs
+      p <- ggplot(data = data, aes(x = avg_log2FC, y = -log10(p_val))) +
+        geom_point(alpha = 0.8, size = 1.0, color = "gray") + # Reduced size
+        theme_bw(base_size = 8) + # Smaller base font
+        theme(legend.position = "none",
+              plot.title = element_text(size = 8, hjust = 0.5), # Smaller title
+              axis.title = element_text(size = 8),
+              axis.text = element_text(size = 7)) +
+        geom_vline(xintercept = negFC, colour = "#000000", linetype = "dashed") +
+        geom_vline(xintercept = posFC, colour = "#000000", linetype = "dashed") +
+        labs(x = expression(log[2](FC)), y = expression(-log[10] ~ "(" ~ italic("p") ~ "-value)")) +
+        ggtitle(paste0(plot_title, "\nNo significant DEGs found"))
+      
+    } else {
+      # Significant DEGs exist
+      
+      # Select Top Genes for Labeling (Reduced count for space in multi-panel)
+      up_data <- significant_DEGs[significant_DEGs$color_adjpval_0.05 == "Up", ]
+      down_data <- significant_DEGs[significant_DEGs$color_adjpval_0.05 == "Down", ]
+      up_data <- up_data[order(up_data$p_val_adj), ]
+      down_data <- down_data[order(down_data$p_val_adj), ]
+      
+      # Top 10 most significant in each direction, plus 5 highly folded (for labeling)
+      up_top <- head(up_data, 10)
+      down_top <- head(down_data, 10)
+      
+      up_fold <- subset(up_data, avg_log2FC > 5)
+      up_fold <- up_fold[!(up_fold$gene %in% up_top$gene),]
+      up_fold <- head(up_fold, 5)
+      
+      down_fold <- subset(down_data, avg_log2FC < -5)
+      down_fold <- down_fold[!(down_fold$gene %in% down_top$gene),]
+      down_fold <- head(down_fold, 5)
+      
+      labeled_genes <- unique(rbind(up_top, up_fold, down_top, down_fold))
+      
+      # Define colors
+      my_colors <- c("Up" = "red", "Down" = "blue", "NS" = "gray")
+      
+      # --- Plotting ---
+      p <- ggplot(data = data, aes(x = avg_log2FC, y = -log10(p_val), color = color_adjpval_0.05)) + 
+        geom_point(alpha = 0.8, size = 1.0) + # Reduced size
+        theme_bw(base_size = 8) + # Smaller base font
+        scale_color_manual(values = my_colors) + 
+        labs(x = expression(log[2](FC)), y = expression(-log[10] ~ "(" ~ italic("p") ~ "-value)")) +
+        theme(legend.position = "none",
+              plot.title = element_text(size = 8, hjust = 0.5), # Smaller title
+              axis.title = element_text(size = 8),
+              axis.text = element_text(size = 7)) +
+       # geom_hline(yintercept = -log10(qval), colour = "darkgray", linetype = "dotted") +
+        geom_vline(xintercept = negFC, colour = "#000000", linetype = "dashed") +
+        geom_vline(xintercept = posFC, colour = "#000000", linetype = "dashed") +
+        ggtitle(paste0(plot_title, "\nAdj. p < ", qval," & |log2FC| > ", FC)) +
+        
+        # Labeling significant genes
+        geom_text_repel(data = labeled_genes,
+                        aes(x = avg_log2FC, y = -log10(p_val), label = gene), 
+                        color = ifelse(labeled_genes$color_adjpval_0.05 == "Up", "maroon", "navyblue"), 
+                        fontface = "italic",
+                        max.overlaps = getOption("ggrepel.max.overlaps", default = 5), # Reduced for multi-panel
+                        size = 2) # Reduced size
+      
+    }
+    
+    # Store the generated plot for this cell type and comparison
+    # This ensures the order of comparisons is preserved within the cell type row
+    cell_type_plots[[paste(pathology_A, "vs", pathology_B)]] <- p
+  }
+  
+  # Append the list of comparison plots for the current cell type to the main list
+  all_plots[[cell_type]] <- cell_type_plots
+}
+
+message("Volcano plot generation and collection complete.")
+
+# -----------------
+# 3. Combine and Save the Final Plot (8 rows x 4 columns)
+# -----------------
+
+# Unlist all plots in the desired order (row by row)
+plot_list <- unlist(all_plots, recursive = FALSE)
+
+# Use patchwork::wrap_plots to arrange them in 8 rows and 4 columns
+# ncol=4 ensures 4 comparisons per row. nrow=8 is implicit.
+final_combined_plot <- wrap_plots(plot_list, ncol = length(comparisons))
+
+# Set the output file path
+final_output_pdf <- paste0(final_volcano_dir, "LBDtypes_vs_AD_combined_cell_type_volcano_plots_female.pdf")
+
+# Save the final combined plot. We need a large size for 32 plots.
+# 4 plots wide * 4 inches/plot = 16 inches
+# 8 plots high * 4 inches/plot = 32 inches
+ggsave(
+  final_output_pdf, 
+  plot = final_combined_plot, 
+  width = 12, 
+  height = 32, 
+  units = "in", 
+  limitsize = FALSE # Allow large file size
+)
+
+message(paste("Final combined plot (8 rows x 4 columns) saved to:", final_output_pdf))
+```
+
+# LBD vs LBD types
+```{r}
+# Keep order of comparisons
+comparisons <- list(
+  c("LBD_AS_female", "LBD_S_female"),
+  c("LBD_ATS_female", "LBD_S_female"),
+  c("LBD_ATS_female", "LBD_AS_female")
+  )
+
+output_dir <- "../results/DEGs_RNA_pct0.25_by_sex/"
+final_volcano_dir <- "../results/volcanoes_MAST_by_sex/"
+
+# -----------------
+# 2. Plot Generation and Collection Loop
+# -----------------
+
+# List to store all generated plots for patchwork (in order of rows/columns)
+all_plots <- list()
+dir.create(final_volcano_dir, recursive = TRUE, showWarnings = FALSE)
+
+for (cell_type in cell_types) {
+  
+  # Initialize a list for the plots in the current row (cell type)
+  cell_type_plots <- list()
+  
+  for (comp in comparisons) {
+    
+    pathology_A <- comp[1]
+    pathology_B <- comp[2]
+    
+    # Construct the file name and path
+    file_name <- paste0(cell_type,"/DEG_", cell_type, "_", pathology_A, "_vs_", pathology_B, ".tsv")
+    file_path <- paste0("../results/DEGs_RNA_pct0.25_by_sex/", file_name)
+    plot_title <- paste0(cell_type, " (", pathology_A, " vs ", pathology_B, ")")
+    
+    # Check if the file exists before attempting to read
+    if (!file.exists(file_path)) {
+      message(paste("Skipping:", file_name, "- File not found. Creating placeholder plot."))
+      # Create a placeholder plot for missing data to maintain the grid structure
+      p <- ggplot() + 
+        geom_text(aes(x=0, y=0, label=paste0(plot_title, "\nData not found")), size=4) + 
+        theme_void()
+      
+      # Store the placeholder plot
+      cell_type_plots[[paste(pathology_A, "vs", pathology_B)]] <- p
+      next # Move to the next comparison
+    }
+    
+    # 1. Read the DEG results
+    data <- read.delim(file_path)
+    data <- na.omit(data) # Ensure no NA rows
+
+    # 2. Check for the required columns
+    if (!all(c("avg_log2FC", "p_val", "p_val_adj", "gene") %in% colnames(data))) {
+      message(paste("Skipping:", file_name, "- Missing required columns. Creating placeholder plot."))
+      p <- ggplot() + 
+        geom_text(aes(x=0, y=0, label=paste0(plot_title, "\nMissing Columns")), size=4) + 
+        theme_void()
+      
+      # Store the placeholder plot
+      cell_type_plots[[paste(pathology_A, "vs", pathology_B)]] <- p
+      next
+    }
+    
+    # --- Volcano Plot Logic (Adapted for Multi-Panel) ---
+    
+    # 3. Determine significance and create a color category column
+    data$color_adjpval_0.05 <- "NS" # Default: Non-significant (Gray)
+    data$color_adjpval_0.05[data$p_val_adj < qval & data$avg_log2FC > posFC] <- "Up"
+    data$color_adjpval_0.05[data$p_val_adj < qval & data$avg_log2FC < negFC] <- "Down"
+    data$color_adjpval_0.05 <- factor(data$color_adjpval_0.05, 
+                                     levels = c("Up", "Down", "NS"))
+    
+    # 4. Check for significant DEGs and set plot parameters
+    significant_DEGs <- subset(data, color_adjpval_0.05 %in% c("Up", "Down"))
+    
+    if (nrow(significant_DEGs) == 0) {
+      # No significant DEGs
+      p <- ggplot(data = data, aes(x = avg_log2FC, y = -log10(p_val))) +
+        geom_point(alpha = 0.8, size = 1.0, color = "gray") + # Reduced size
+        theme_bw(base_size = 8) + # Smaller base font
+        theme(legend.position = "none",
+              plot.title = element_text(size = 8, hjust = 0.5), # Smaller title
+              axis.title = element_text(size = 8),
+              axis.text = element_text(size = 7)) +
+        geom_vline(xintercept = negFC, colour = "#000000", linetype = "dashed") +
+        geom_vline(xintercept = posFC, colour = "#000000", linetype = "dashed") +
+        labs(x = expression(log[2](FC)), y = expression(-log[10] ~ "(" ~ italic("p") ~ "-value)")) +
+        ggtitle(paste0(plot_title, "\nNo significant DEGs found"))
+      
+    } else {
+      # Significant DEGs exist
+      
+      # Select Top Genes for Labeling (Reduced count for space in multi-panel)
+      up_data <- significant_DEGs[significant_DEGs$color_adjpval_0.05 == "Up", ]
+      down_data <- significant_DEGs[significant_DEGs$color_adjpval_0.05 == "Down", ]
+      up_data <- up_data[order(up_data$p_val_adj), ]
+      down_data <- down_data[order(down_data$p_val_adj), ]
+      
+      # Top 10 most significant in each direction, plus 5 highly folded (for labeling)
+      up_top <- head(up_data, 10)
+      down_top <- head(down_data, 10)
+      
+      up_fold <- subset(up_data, avg_log2FC > 5)
+      up_fold <- up_fold[!(up_fold$gene %in% up_top$gene),]
+      up_fold <- head(up_fold, 5)
+      
+      down_fold <- subset(down_data, avg_log2FC < -5)
+      down_fold <- down_fold[!(down_fold$gene %in% down_top$gene),]
+      down_fold <- head(down_fold, 5)
+      
+      labeled_genes <- unique(rbind(up_top, up_fold, down_top, down_fold))
+      
+      # Define colors
+      my_colors <- c("Up" = "red", "Down" = "blue", "NS" = "gray")
+      
+      # --- Plotting ---
+      p <- ggplot(data = data, aes(x = avg_log2FC, y = -log10(p_val), color = color_adjpval_0.05)) + 
+        geom_point(alpha = 0.8, size = 1.0) + # Reduced size
+        theme_bw(base_size = 8) + # Smaller base font
+        scale_color_manual(values = my_colors) + 
+        labs(x = expression(log[2](FC)), y = expression(-log[10] ~ "(" ~ italic("p") ~ "-value)")) +
+        theme(legend.position = "none",
+              plot.title = element_text(size = 8, hjust = 0.5), # Smaller title
+              axis.title = element_text(size = 8),
+              axis.text = element_text(size = 7)) +
+       # geom_hline(yintercept = -log10(qval), colour = "darkgray", linetype = "dotted") +
+        geom_vline(xintercept = negFC, colour = "#000000", linetype = "dashed") +
+        geom_vline(xintercept = posFC, colour = "#000000", linetype = "dashed") +
+        ggtitle(paste0(plot_title, "\nAdj. p < ", qval," & |log2FC| > ", FC)) +
+        
+        # Labeling significant genes
+        geom_text_repel(data = labeled_genes,
+                        aes(x = avg_log2FC, y = -log10(p_val), label = gene), 
+                        color = ifelse(labeled_genes$color_adjpval_0.05 == "Up", "maroon", "navyblue"), 
+                        fontface = "italic",
+                        max.overlaps = getOption("ggrepel.max.overlaps", default = 5), # Reduced for multi-panel
+                        size = 2) # Reduced size
+      
+    }
+    
+    # Store the generated plot for this cell type and comparison
+    # This ensures the order of comparisons is preserved within the cell type row
+    cell_type_plots[[paste(pathology_A, "vs", pathology_B)]] <- p
+  }
+  
+  # Append the list of comparison plots for the current cell type to the main list
+  all_plots[[cell_type]] <- cell_type_plots
+}
+
+message("Volcano plot generation and collection complete.")
+
+# -----------------
+# 3. Combine and Save the Final Plot (8 rows x 4 columns)
+# -----------------
+
+# Unlist all plots in the desired order (row by row)
+plot_list <- unlist(all_plots, recursive = FALSE)
+
+# Use patchwork::wrap_plots to arrange them in 8 rows and 4 columns
+# ncol=4 ensures 4 comparisons per row. nrow=8 is implicit.
+final_combined_plot <- wrap_plots(plot_list, ncol = length(comparisons))
+
+# Set the output file path
+final_output_pdf <- paste0(final_volcano_dir, "LBDtypes_vs_LBDtypes_combined_cell_type_volcano_plots_female.pdf")
+
+# Save the final combined plot. We need a large size for 32 plots.
+# 4 plots wide * 4 inches/plot = 16 inches
+# 8 plots high * 4 inches/plot = 32 inches
+ggsave(
+  final_output_pdf, 
+  plot = final_combined_plot, 
+  width = 12, 
+  height = 32, 
+  units = "in", 
+  limitsize = FALSE # Allow large file size
+)
+
+message(paste("Final combined plot (8 rows x 4 columns) saved to:", final_output_pdf))
+```

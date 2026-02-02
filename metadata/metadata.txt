@@ -1,0 +1,41 @@
+NPID	Sort	TYPE	PathDx	AD.subtype	LBD.type	Braak.NFT	Thal.amyloid	MF.SP	MF.NFT	MF.LB	Cing.LB	MF.Amyloid	MF.Tau	Cing.Synuclein	CWOW.Category	VaD	TDP.43	ClinicalDx	FHx	Sex	sex_inferred	Age	PMI	APOE	MAPT	GRN	TMEM106b	RIN	ATS_names
+NA04-053	292	LBD_S	TLBD		TLBD	2	1	1	0	2	9	1	0	2	A1, T0, S2	0	0	PD	No	M	female	85	NA	E3E3	H1H1	TT	TC	7.6	low amyloid + synuclein
+NA06-092	335	LBD_S	TLBD		TLBD	2	0	0	0	1	7	0	0	2	A0, T0, S2	0	0	PD	No	F	female	77	4	E3E3	H1H1	CT	TC	7.4	pure synuclein
+NA11-143	208	LBD_S	DLBD		DLBD	0	0	0	0	6	12	0	0	3	A0, T0, S3	0	0	PDD	Yes	F	female	68	3	E3E4	H1H2	CT	CC	3.3	pure synuclein
+NA14-253	45	LBD_S	DLBD/SC/DBS		DLBD	2	1	10	0	18	22	2	0	4	A2, T0, S4	0	0	PDD (s/p DBS)	No	F	female	62	7	E3E4				2.3	high amyloid + synuclein
+NA04-082	290	LBD_S	TLBD		TLBD	0	0	0	0	2	9	0	0	2	A0, T0, S2	0	0	PDD	No	M	male	72	8	E3E4	H1H1	CT	TC	8.4	pure synuclein
+NA10-006	207	LBD_S	TLBD		TLBD	2	0	0	0	3	12	0	0	3	A0, T0, S3	0	0	DLB/CVA	No	M	male	83	5	E3E3	H2H2	CT	TC	8.6	pure synuclein
+NA16-075	152	LBD_S	DLBD		DLBD	2	0	0	0	10	15	0	0	3	A0, T0, S3	0	0	PD-MCI	Yes	M	male	66	NA	E2E3				4.7	pure synuclein
+NA19-272	310	LBD_S	TLBD/PART		TLBD	1	0	0	0	3	8	0	0	2	A0, T0, S2	0	0	PDD	Yes	M	male	67	NA	E2E4				NA	pure synuclein
+NA03-235	261	LBD_AS	DLBD/PA		DLBD	2	4	50	0	6	10	3	0	2	A3, T0, S2	0	0	DLB	No	F	female	79	NA	E3E4	H1H2	CT	CC	8	high amyloid + synuclein
+NA07-189	158	LBD_AS	DLBD/PA/Fahr/OA		DLBD	2	4	50	0	5	15	3	0	3	A3, T0, S3	0	0	PD	No	F	female	88	6	E3E3	H1H2	CT	TC	6.5	high amyloid + synuclein
+NA18-058	328	LBD_AS	DLBD/PA		DLBD	2	4	50	0	6	8	3	0	2	A3, T0, S2	0	0	MSA-P (RBD)	No	F	female	74	NA	E3E4				1.9	high amyloid + synuclein
+NA19-352	176	LBD_AS	DLBD/PA		DLBD	2	4	50	0	10	15	3	0	3	A3, T0, S3	0	0	DLB	No	F	female	81	NA	E3E4				8.6	high amyloid + synuclein
+NA04-040	263	LBD_AS	DLBD/PA		DLBD	2	3	50	0	7	10	3	0	2	A3, T0, S2	0	0	AD/PD	No	M	male	78	NA	E3E4	H1H2	CT	CC	8.4	high amyloid + synuclein
+NA05-100	101	LBD_AS	DLBD/PA		DLBD	2	3	50	0	10	18	3	0	3	A3, T0, S3	0	0	AD/PD	Yes	M	male	78	NA	E3E3	H1H1	CC	TC	6.2	high amyloid + synuclein
+NA07-148	247	LBD_AS	DLBD/PA		DLBD	2	3	50	0	7	11	3	0	3	A3, T0, S3	0	0	PSP	No	M	male	83	NA	E3E4	H1H1	CT	TC	6.5	high amyloid + synuclein
+NA08-354	296	LBD_AS	DLBD/PA		DLBD	2	5	50	0	5	9	3	0	2	A3, T0, S2	0	0	PD	No	M	male	78	11	E3E3	H1H2	CC	TC	5.8	high amyloid + synuclein
+NA11-095	32	LBD_ATS	DLBD/AD, early		DLBD	4	3	50	2	22	25	3	1	4	A3, T1, S4	0	0	PDD	No	F	female	66	16	E2E4	H1H2	CC	TT	5.2	amyloid + synuclein + tau
+NA12-009	243	LBD_ATS	DLBD/AD, early/MI in S nigra		DLBD	4	3	50	1	5	12	3	1	3	A3, T1, S3	0	0	DLB	No	F	female	91	NA	E3E3	H1H2	CC	CC	5.1	amyloid + synuclein + tau
+NA18-010	150	LBD_ATS	DLBD /AD, early	Typical	DLBD	4	4	50	2	8	16	3	1	3	A3, T1, S3	0	0	PSP v DLB	Yes	F	female	68	NA	E3E3				6.3	amyloid + synuclein + tau
+NA19-052	181	LBD_ATS	AD/DLBD/OA/LGN	Typical	DLBD	6	5	50	2	7	15	3	1	3	A3, T1, S3	0	0	PDD	No	F	female	89	NA	E3E3				2.7	amyloid + synuclein + tau
+NA09-046	242	LBD_ATS	DLBD/PA		DLBD	4	5	50	1	7	12	3	1	3	A3, T1, S3	0	0	DLB	No	M	male	80	4	E3E4	H1H1	CC	TC	6.5	amyloid + synuclein + tau
+NA09-152	54	LBD_ATS	DLBD/AD, early		DLBD	4	5	50	2	8	22	3	1	4	A3, T1, S4	0	0	AD/PD v DLB	No	M	male	85	4	E3E3	H1H2	CC	TC	7.1	amyloid + synuclein + tau
+NA11-072	113	LBD_ATS	DLBD/PA (vs AD, early)		DLBD	4	3	50	1	5	18	3	1	3	A3, T1, S3	0	0	DLB	Yes	M	male	75	2	E3E3	H1H1	CC	TC	4.5	amyloid + synuclein + tau
+NA18-132	288	LBD_ATS	DLBD/PA v AD, early (DBS right side)	Typical	DLBD	4	4	50	1	4	10	3	1	2	A3, T1, S2	0	0	PD (s/p DBS)	No	M	male	73	NA	E3E4				6.8	amyloid + synuclein + tau
+NA05-057	589	AD_AT	AD	Typical	no LBs	6	5	50	3	0	NA	3	1	NA	A3, T1, S0	0	0	AD	No	F	female	78	NA	E3E4	H2H2	CC	TC	7.2	amyloid + tau
+NA05-394	603	AD_AT	AD	Typical	no LBs	5	3	50	5	0	NA	3	1	NA	A3, T1, S0	0	0	AD	No	F	female	93	NA	E3E3	H1H1	CT	CC	5.8	amyloid + tau
+NA15-058	587	AD_AT	AD	Typical	no LBs	5	5	50	2	0	NA	3	1	NA	A3, T1, S0	0	0	AD	No	F	female	83	NA	E3E4				3.1	amyloid + tau
+NA17-179	608	AD_AT	AD	Typical	no LBs	5	5	50	5	0	NA	3	1	NA	A3, T1, S0	0	0	AD	Yes	F	female	78	3	E3E3				5.7	amyloid + tau
+NA05-203	600	AD_AT	AD	Typical	no LBs	6	5	50	4	0	NA	3	1	NA	A3, T1, S0	0	0	AD	No	M	male	71	NA	E3E4	H1H1	CC	CC	5.2	amyloid + tau
+NA05-275	601	AD_AT	AD	Typical	no LBs	5	5	50	4	0	NA	3	1	NA	A3, T1, S0	0	0	AD	No	M	male	85	8	E3E3				5.6	amyloid + tau
+NA08-335	596	AD_AT	AD	Typical	no LBs	6	5	50	3	0	NA	3	1	NA	A3, T1, S0	0	0	AD	No	M	male	84	2	E3E3	H1H2	TT	TC	8.9	amyloid + tau
+NA15-068	606	AD_AT	AD	Typical	no LBs	6	5	50	5	0	NA	3	1	NA	A3, T1, S0	0	0	AD	No	M	male	68	7	E3E4		CT		7.9	amyloid + tau
+NA03-248	532	CONTROL	SC		no LBs	3	1	0	0	0	NA	0	0	NA	A0, T0, S0	0	0	NCI	No	F	female	82	19	E3E4	H1H1			2.1	no pathology
+NA04-324	507	CONTROL	PART		no LBs	3	0	0	0	0	NA	0	0	NA	A0, T0, S0	0	0	NCI	No	F	female	74	27	E2E3				6.4	no pathology
+NA12-134	510	CONTROL	PART		no LBs	3	0	0	0	0	NA	0	0	NA	A0, T0, S0	0	0	NCI	No	F	female	91	14	E3E3				4.6	no pathology
+NA13-252	459	CONTROL	Normal/Fahr		no LBs	0	0	0	0	0	NA	0	0	NA	A0, T0, S0	0	0	NCI	No	F	female	85	NA	E2E3				7.7	no pathology
+5282	455	CONTROL	Normal		no LBs	0	0	0	0	0	NA	0	0	NA	A0, T0, S0	0	NA	NCI	No	M	male	69	16	E3E3	H1H2	CC		5.2	no pathology
+5421	533	CONTROL	SC/CVAs		no LBs	3	1	0	0	0	NA	0	0	NA	A0, T0, S0	0	NA	NCI	No	M	male	84	24	E3E3	H1H1	TT		3.3	no pathology
+NA08-052	508	CONTROL	PART		no LBs	3	0	0	0	0	NA	0	0	NA	A0, T0, S0	0	0	NCI	No	M	male	75	NA	E3E3				5.4	no pathology
+NA12-465	478	CONTROL	PART		no LBs	2	0	0	0	0	NA	0	0	NA	A0, T0, S0	0	0	NCI	No	M	male	81	29	E2E3				6.7	no pathology

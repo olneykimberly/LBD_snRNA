@@ -1,0 +1,233 @@
+---
+title: "Figure 1 - UMAP and proportions"
+author: "Kimberly Olney, PhD"
+date: "11/25/2025"
+output:
+  html_document:
+    theme: cerulean
+    toc: true
+    toc_float: true
+editor_options: 
+  chunk_output_type: inline
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = "/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/scripts/")
+setwd("/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/scripts/")
+```
+
+# Libraris, paths, colors
+```{r echo=FALSE, message=FALSE}
+source(here::here("/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/scripts/", "file_paths_and_colours.R"))
+color.panel <- dittoColors()
+```
+
+# add small legend
+```{r}
+addSmallLegend <- function(myPlot, pointSize = 3, textSize = 8, spaceLegend = 1) {
+    myPlot +
+        guides(shape = guide_legend(override.aes = list(size = pointSize)),
+               color = guide_legend(override.aes = list(size = pointSize))) +
+        theme(legend.title = element_text(size = textSize), 
+              legend.text  = element_text(size = textSize),
+              legend.key.size = unit(spaceLegend, "lines"))
+}
+
+#color.panel <- c("#E69F00", "#56B4E9", "#009E73", "orchid4", "#0072B2", "#D55E00", "#CC79A7", "#666666", "#AD7700" ,"#1C91D4", "#007756")
+
+genes_markers <-
+  c("PLP1", 
+    "MOG",
+    "OLIG1", 
+    "VCAN",
+    "GFAP", 
+    "AQP4", 
+    "DOCK8", 
+    "P2RY12",
+    "SYT1",
+    "RBFOX3",
+ #   "GAD1",
+    "GAD2",
+    "EBF1",
+    "COL1A2",
+    "FLT1", 
+    "ADGRF5"
+)
+```
+
+# Read in object
+```{r read_object}
+project_ID <- "CWOW_cellbender"
+dataObject <- readRDS(paste0("../rObjects/", project_ID, "_filtered_subclusters_pass2.rds"))
+Idents(dataObject) <- factor(x = Idents(dataObject), levels = order_cell_type)
+```
+
+### UMAP
+```{r UMAP}
+UMAP_plot <- DimPlot(dataObject, reduction = "umap.rpca", label = FALSE, label.size = 3) + 
+  xlab("UMAP 1") + 
+  ylab("UMAP 2") +
+    theme(
+    axis.title.x = element_text(size = 8),
+    axis.text.x = element_text(size = 8),
+    axis.title.y = element_text(size = 8),
+    axis.text.y = element_text(size = 8),
+    legend.position = "none",
+    plot.title = element_text(size = 8),
+    plot.margin = margin(0.5, 0.025, 0.25, 0.025, "cm")
+  ) +
+  guides(colour = guide_legend(override.aes = list(size = 10))) +
+  scale_color_manual(values = color.panel)
+UMAP_plot <- addSmallLegend(UMAP_plot)
+UMAP_plot
+```
+
+### Cell type count
+```{r}
+count_per_cluster <- FetchData(dataObject,
+                               vars = c("ident")) %>%
+  dplyr::count(ident) %>%
+  tidyr::spread(ident, n)
+count_per_cluster
+
+count_melt <- reshape2::melt(count_per_cluster)
+colnames(count_melt) <- c("cluster", "number of nuclei")
+count_max <- count_melt[which.max(count_melt$`number of nuclei`), ]
+count_max_value <- count_max$`number of nuclei`
+cellmax <- count_max_value + 25000 # so that the figure doesn't cut off the text
+count_bar <- ggplot(count_melt, aes(x = factor(cluster), y = `number of nuclei`, fill = `cluster`)) +
+  geom_bar(
+    stat = "identity",
+    colour = "black",
+    width = 1,
+    position = position_dodge(width = 0.8)
+  ) +
+  geom_text(
+    aes(label = `number of nuclei`),
+    position = position_dodge(width = 0.9),
+    vjust = -0.35,
+   # angle = 45,
+   # hjust = -.01,
+    size = 2.5
+  ) +
+  theme_classic() + scale_fill_manual(values = color.panel) +
+  ggtitle("Number of nuclei per cell type")  +
+  theme(
+     axis.text.x = element_text(size = 7, angle = 25, hjust = 1),
+    axis.title.x = element_blank(),
+    axis.title.y = element_text(size = 8),
+    axis.text.y = element_text(size = 8),
+    legend.position = "none",
+    plot.title = element_text(size = 8),
+    plot.margin = margin(0.25, 0.025, 0.25, 0.5, "cm")
+  ) +
+  scale_y_continuous(limits = c(0, cellmax))
+#count_bar <- addSmallLegend(count_bar)
+count_bar
+```
+
+### DotPlot
+```{r dotplot}
+# DotPlot with continuous color scale and percent expressed up to 100
+dot_ind <- DotPlot(
+  dataObject,
+  features = genes_markers,
+  cluster.idents = FALSE,
+  dot.scale = 8
+) + 
+  RotatedAxis() +
+  scale_color_distiller(palette = "YlGnBu", direction = 1) +  # continuous color
+  scale_size(range = c(0, 8), limits = c(0, 100)) +           # scale bubbles to 0-100%
+  theme(
+    axis.title.x = element_blank(),
+    axis.text.x = element_text(size = 8),
+    axis.title.y = element_blank(),
+    axis.text.y = element_text(size = 8),
+    plot.title = element_text(size = 8),
+    plot.margin = margin(1, 0.05, 0.25, 0.05, "cm")
+  )
+
+# Optional: small legend function
+addSmallLegend <- function(myPlot, pointSize = 1, textSize = 7, spaceLegend = 0.75) {
+  myPlot +
+    guides(
+      shape = guide_legend(override.aes = list(size = pointSize)),
+      color = guide_colorbar(title = "Avg Exp")  # use continuous colorbar for avg.exp.scaled
+    ) +
+    theme(
+      legend.title = element_text(size = textSize), 
+      legend.text  = element_text(size = textSize),
+      legend.key.size = unit(spaceLegend, "lines")
+    )
+}
+
+dot_ind <- addSmallLegend(dot_ind)
+dot_ind 
+```
+
+## Relative abundance
+```{r}
+relative_abundance <- dataObject@meta.data %>%
+  group_by(cell_type, group) %>%
+  dplyr::count() %>%
+  group_by(group) %>%
+  dplyr::mutate(percent = 100 * n / sum(n)) %>%
+  ungroup()
+
+rel_abun <- ggplot(relative_abundance, aes(x = group, y = percent, fill = cell_type)) +
+  geom_col() +
+  geom_text(
+    aes(label = ifelse(percent > 5, paste0(round(percent), "%"), "")),
+    position = position_stack(vjust = 0.5),
+    size = 2,
+    color = "white"
+  ) +
+  scale_fill_manual(values = color.panel) +
+  ggtitle("Relative abundance") +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(size = 7, angle = 25, hjust = 1),
+    axis.title.x = element_blank(),
+    axis.title.y = element_text(size = 8),
+    axis.text.y = element_text(size = 8),
+    legend.position = "none",
+    plot.title = element_text(size = 8),
+    plot.margin = margin(0.25, 0.25, 0.25, 0.5, "cm")
+  )
+
+rel_abun <- addSmallLegend(rel_abun)
+rel_abun
+```
+
+# Figure 1 - combined
+```{r}
+row1 <-
+  ggarrange(
+    UMAP_plot,
+    count_bar,
+    ncol = 2,
+    labels = c("A","B"), 
+  font.label = list(size = 10)
+    )
+
+row2 <- ggarrange(
+    dot_ind,
+    rel_abun, 
+    ncol = 2, 
+    widths =  c(2, .85),
+    labels = c("C", "D"), 
+  font.label = list(size = 10)
+    )
+  
+row_combined <- 
+   ggarrange(
+    row1,
+    row2,
+    nrow=2
+    )
+row_combined
+path <- paste0("../manuscript_figures/Figure_1_UMAP")
+saveToPDF(paste0(path, ".pdf"), width = 7, height = 5.5)
+```
+#-----------------------
