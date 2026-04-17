@@ -18,3 +18,5 @@ cellbender_pdfs/*
 scripts/.snakemake*
 scripts/SRA_info/*
 manuscript_figures/*
+.DS_Store
+LBD_snRNA.Rproj
