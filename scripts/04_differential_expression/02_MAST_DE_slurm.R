@@ -41,14 +41,14 @@ comparisons <- list(
   c("LBD_ATS", "LBD_AS")
 )
 
-out_base <- "../results/DEGs_RNA_pct0.25/"
+out_base <- "../results/DEGs_RNA_pct0.25_with_latent_age_sex_Sample_ID/"
 dir.create(out_base, recursive = TRUE, showWarnings = FALSE)
 
 # Reproducibility
 set.seed(12345)
 options(stringsAsFactors = FALSE)
 
-latent <- c("sex_inferred", "Age")
+latent <- c("sex_inferred", "Age", "Sample_ID")
 
 for (ct in cell_types) {
   message("\n==== Cell type: ", ct, " ====")

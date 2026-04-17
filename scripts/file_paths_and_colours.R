@@ -4,8 +4,8 @@ set.seed(28)
 .libPaths()
 
 library(Matrix)
-packageVersion("Matrix")
-find.package("Matrix")
+##packageVersion("Matrix")
+#find.package("Matrix")
 
 # suppress startup messages for ALL package loads + remove duplicates
 suppressPackageStartupMessages({
@@ -24,7 +24,7 @@ suppressPackageStartupMessages({
   library(lattice)
   library(R.utils)
   library(SeuratWrappers)
-  library(Azimuth)
+  #library(Azimuth)
   library(dittoSeq)
   library(dplyr)
   library(RColorBrewer)

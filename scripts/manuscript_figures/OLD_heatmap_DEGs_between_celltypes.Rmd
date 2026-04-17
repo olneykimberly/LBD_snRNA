@@ -1,0 +1,649 @@
+---
+title: "Figure 1 - UMAP and proportions"
+author: "Kimberly Olney, PhD"
+date: "11/25/2025"
+output:
+  html_document:
+    theme: cerulean
+    toc: true
+    toc_float: true
+editor_options: 
+  chunk_output_type: inline
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = "/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/scripts/")
+setwd("/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/scripts/")
+```
+
+# Libraris, paths, colors
+```{r echo=FALSE, message=FALSE}
+source(here::here("/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/scripts/", "file_paths_and_colours.R"))
+color.panel <- dittoColors()
+```
+
+# add small legend
+```{r}
+addSmallLegend <- function(myPlot, pointSize = 3, textSize = 8, spaceLegend = 1) {
+    myPlot +
+        guides(shape = guide_legend(override.aes = list(size = pointSize)),
+               color = guide_legend(override.aes = list(size = pointSize))) +
+        theme(legend.title = element_text(size = textSize), 
+              legend.text  = element_text(size = textSize),
+              legend.key.size = unit(spaceLegend, "lines"))
+}
+
+color.panel <- c("#E69F00", "#56B4E9", "#009E73", "orchid4", "#0072B2", "#D55E00", "#CC79A7", "#666666", "#AD7700" ,"#1C91D4", "#007756")
+
+genes_markers <-
+  c("PLP1", 
+    "MOG",
+    "OLIG1", 
+    "VCAN",
+    "GFAP", 
+    "AQP4", 
+    "DOCK8", 
+    "P2RY12",
+    "SYT1",
+    "RBFOX3",
+    "GAD2",
+    "EBF1",
+    "COL1A2",
+    "FLT1", 
+    "ADGRF5"
+)
+```
+
+# Read in object
+```{r read_object}
+projectID <- "CWOW_cellbender_RPCAIntegration_clean_RNA_annotation"
+
+dataObject <- readRDS(paste0("../rObjects/",projectID,".rds"))
+dataObject
+# inspect
+dataObject <- NormalizeData(dataObject)
+```
+
+# Cell proportion heatmap
+```{r}
+## Required packages
+library(pheatmap)
+
+# ------------------------------------------------------------
+# 1. Extract metadata
+# ------------------------------------------------------------
+meta <- dataObject@meta.data %>%
+  dplyr::select(sample = Sample_ID, group, individual_clusters)
+
+# ------------------------------------------------------------
+# 2. Compute cell-type proportions per sample
+# ------------------------------------------------------------
+cell_counts <- meta %>%
+  group_by(sample, group, individual_clusters) %>%
+   dplyr::summarise(n =dplyr::n(), .groups = "drop")
+
+# total cells per sample
+totals <- cell_counts %>%
+  group_by(sample) %>%
+   dplyr::summarise(total = sum(n))
+
+# merge and compute proportion
+cell_props <- left_join(cell_counts, totals, by = "sample") %>%
+  mutate(prop = n / total)
+
+# ------------------------------------------------------------
+# 3. Convert to matrix (celltype × sample)
+# ------------------------------------------------------------
+heatmap_mat <- cell_props %>%
+  select(sample, individual_clusters, prop) %>%
+  pivot_wider(names_from = sample, values_from = prop, values_fill = 0)
+
+# Set rownames
+heatmap_mat <- as.data.frame(heatmap_mat)
+rownames(heatmap_mat) <- heatmap_mat$individual_clusters
+heatmap_mat$individual_clusters <- NULL
+heatmap_mat <- as.matrix(heatmap_mat)
+
+# ------------------------------------------------------------
+# 4. Create annotation (sample groups)
+# ------------------------------------------------------------
+sample_ann <- meta %>% 
+  dplyr::select(sample, group) %>% 
+  distinct()
+
+sample_ann <- sample_ann[match(colnames(heatmap_mat), sample_ann$sample), ]
+
+annotation_col <- data.frame(Group = sample_ann$group)
+rownames(annotation_col) <- sample_ann$Sample_ID
+
+ann_colors <- list(
+  Group = c(
+    CONTROL = "#4682B4",
+    AD_AT  = "#B4464B",
+    LBD_S =  "gray",
+    LBD_S = "gray65", 
+    LBD_ATS = "gray35"
+  )
+)
+
+# ------------------------------------------------------------
+# 5. Plot heatmap (similar to Fig. 1d)
+# ------------------------------------------------------------
+pheatmap(
+  heatmap_mat,
+  scale = "none",
+  clustering_method = "ward.D2",
+  cluster_cols = TRUE,
+  cluster_rows = TRUE,
+  color = colorRampPalette(c("navy", "white", "firebrick3"))(100),
+  annotation_col = annotation_col,
+  annotation_colors = ann_colors,
+  fontsize_row = 9,
+  fontsize_col = 8,
+  border_color = NA
+)
+```
+
+# DEG heatmaps
+```{r}
+###############################################
+### Load libraries
+###############################################
+library(tidyverse)
+library(ComplexHeatmap)
+library(circlize)
+comparisons_to_plot <- list(
+  c("AD_AT", "CONTROL"),
+  c("LBD_S", "CONTROL"),
+  c("LBD_AS", "CONTROL"),
+  c("LBD_ATS", "CONTROL")
+)
+
+cell_types <- c("neuron", "interneuron", "oligodendrocyte", 
+                "opc", "astrocyte", "microglia", "mural", "endothelial")
+
+main_output_dir <- "/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/results/DEGs_RNA_pct0.25"
+
+up_logfc_cutoff   <-  0.25
+down_logfc_cutoff <- -0.25
+padj_cutoff <- 0.05
+
+###############################################
+### Helper: safe read
+###############################################
+safe_read_deg <- function(path) {
+  tryCatch(readr::read_tsv(path, show_col_types = FALSE),
+    error = function(e)
+      tryCatch(readr::read_csv(path, show_col_types = FALSE),
+        error = function(e2)
+          read.table(path, header = TRUE, sep = "", stringsAsFactors = FALSE)))
+}
+
+###############################################
+### Find DEG files
+###############################################
+all_files <- list.files(
+  main_output_dir,
+  pattern = "^DEG_.*_vs_.*\\.(txt|csv|tsv)$",
+  recursive = TRUE,
+  full.names = TRUE
+)
+
+stopifnot(length(all_files) > 0)
+
+file_df <- tibble(path = all_files) %>%
+  mutate(bn = basename(path),
+         noext = tools::file_path_sans_ext(bn),
+         after_deg = str_remove(noext, "^DEG_"),
+         cell_type = word(after_deg, 1, sep = fixed("_")),
+         rest = str_remove(after_deg, paste0("^", cell_type, "_")),
+         comparison = rest) %>%
+  filter(cell_type %in% cell_types)
+
+###############################################
+### Convert comparisons_to_plot into strings
+###############################################
+plot_order <- sapply(comparisons_to_plot, function(x) paste0(x[1], "_vs_", x[2]))
+
+file_df <- file_df %>%
+  dplyr::filter(comparison %in% plot_order)
+
+###############################################
+### Function: Build Heatmap Matrix
+###############################################
+build_matrix_for_heatmap <- function(comparison_string) {
+  
+  # collect all DEGs from all cell types for this comparison
+  df_list <- list()
+  
+  for (ct in cell_types) {
+    f <- file_df %>% filter(cell_type == ct, comparison == comparison_string)
+    if (nrow(f) == 1) {
+      deg <- safe_read_deg(f$path)
+      # required columns: gene, avg_log2FC, p_val_adj
+      if (!"avg_log2FC" %in% colnames(deg)) {
+        stop("DEG file missing avg_log2FC column: ", f$path)
+      }
+      if (!"p_val_adj" %in% colnames(deg)) {
+        stop("DEG file missing p_val_adj column: ", f$path)
+      }
+      
+      # apply FDR+logFC thresholds
+      deg_filt <- deg %>%
+        filter(p_val_adj <= padj_cutoff,
+               avg_log2FC >= up_logfc_cutoff | avg_log2FC <= down_logfc_cutoff) %>%
+        select(gene, avg_log2FC)
+      
+      if (nrow(deg_filt) > 0) {
+        df_list[[ct]] <- deg_filt
+      }
+    }
+  }
+  
+  # union of all DEGs across cell types
+  all_genes <- unique(unlist(lapply(df_list, function(x) x$gene)))
+  if (length(all_genes) == 0) {
+    stop("No DEGs for comparison: ", comparison_string)
+  }
+  
+  # matrix genes x cell_types
+  mat <- matrix(0, nrow = length(all_genes), ncol = length(cell_types))
+  rownames(mat) <- all_genes
+  colnames(mat) <- cell_types
+  
+  for (ct in names(df_list)) {
+    tmp <- df_list[[ct]]
+    mat[tmp$gene, ct] <- tmp$avg_log2FC
+  }
+  
+  return(mat)
+}
+
+###############################################
+### Plot each comparison as a heatmap
+### (matching panel d structure)
+###############################################
+dir.create("panel_d_heatmaps", showWarnings = FALSE)
+
+for (comp in plot_order) {
+  
+  message("Building heatmap for: ", comp)
+  
+  mat <- build_matrix_for_heatmap(comp)
+  
+  # scale genes (rows) like the figure
+  mat_scaled <- t(scale(t(mat)))
+  
+  # cell-type colors (panel legend)
+  ct_colors <- c(
+    neuron = "#1f77b4",
+    interneuron = "#aec7e8",
+    oligodendrocyte = "#2ca02c",
+    opc = "#98df8a",
+    astrocyte = "#ff7f0e",
+    microglia = "#d62728",
+    mural = "#9467bd",
+    endothelial = "#8c564b"
+  )
+  
+  ha = HeatmapAnnotation(
+    CellType = colnames(mat_scaled),
+    col = list(CellType = ct_colors),
+    annotation_legend_param = list(title = "Cell type")
+  )
+  
+  pdf(file = file.path("DEG_heatmaps", paste0("heatmap_", comp, ".pdf")),
+      width = 5, height = 7)
+  
+  print(
+    Heatmap(
+      mat_scaled,
+      name = "Scaled\nlog2FC",
+      top_annotation = ha,
+      cluster_rows = TRUE,
+      cluster_columns = TRUE,
+      show_row_names = FALSE,
+      col = colorRamp2(c(-2, 0, 2), c("blue", "white", "red")),
+      heatmap_legend_param = list(
+        title = "Scaled log2FC",
+        legend_height = unit(4, "cm")
+      )
+    )
+  )
+  
+  dev.off()
+}
+```
+
+### samples as columns
+```{r}
+# Required libraries
+library(Seurat)
+library(dplyr)
+library(readr)
+library(pheatmap)
+library(RColorBrewer)
+
+# ---- User inputs (from your message) ----
+dataObject <- dataObject        # Seurat v5 object already in your environment
+main_output_dir <- "/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/results/DEGs_RNA_pct0.25"
+
+comparisons_to_plot <- list(
+  c("AD_AT",   "CONTROL"),
+  c("LBD_S",   "CONTROL"),
+  c("LBD_AS",  "CONTROL"),
+  c("LBD_ATS", "CONTROL")
+)
+
+cell_types <- c("neuron", "interneuron", "oligodendrocyte",
+                "opc", "astrocyte", "microglia", "mural", "endothelial")
+
+up_logfc_cutoff   <- 0.25
+down_logfc_cutoff <- -0.25
+padj_cutoff       <- 0.05
+
+# meta
+meta <- dataObject@meta.data
+# columns expected: meta$TYPE (group), meta$Sample_ID, meta$individual_clusters
+
+# Expression matrix to use: change slot if you want other slots
+expr_mat <- GetAssayData(dataObject, assay = "RNA", slot = "data") 
+# rows = genes, cols = cells. Make sure rownames are gene symbols (or consistent with DEGs)
+glimpse(expr_mat)
+# helper to read DEG file for a given cell type and comparison
+read_deg_for <- function(celltype, group1, group2, main_output_dir) {
+  fname <- file.path(main_output_dir, celltype,
+                     sprintf("DEG_%s_%s_vs_%s.txt", celltype, group1, group2))
+  if (!file.exists(fname)) {
+    # try alternate pattern (some people use underscores or different order)
+    warning("DEG file not found: ", fname)
+    return(NULL)
+  }
+  df <- read_tsv(fname, show_col_types = FALSE)
+  # required columns: gene, avg_log2FC, p_val_adj (or p_val_adj)
+  # normalize column names if needed
+  colnames(df) <- tolower(colnames(df))
+  if (!"gene" %in% colnames(df)) {
+    stop("DEG file doesn't contain 'gene' column: ", fname)
+  }
+  # filter
+  # keep up OR down if meet thresholds
+  df_filt <- df %>%
+    filter(!is.na(gene)) %>%
+    filter(p_val_adj <= padj_cutoff) %>%
+    filter(avg_log2fc >= up_logfc_cutoff | avg_log2fc <= down_logfc_cutoff)
+  unique(df_filt$gene)
+}
+
+# Main loop over comparisons
+for (cmp in comparisons_to_plot) {
+  group1 <- cmp[1]; group2 <- cmp[2]
+  cat("Processing comparison:", group1, "vs", group2, "\n")
+  # samples to include = samples that belong to either group in meta$TYPE
+  samples_in_groups <- unique(meta$Sample_ID[meta$TYPE %in% c(group1, group2)])
+  if (length(samples_in_groups) == 0) {
+    warning("No samples found for groups:", group1, group2); next
+  }
+  # build empty matrix: rows = samples, cols = cell types
+  mat <- matrix(NA_real_, nrow = length(samples_in_groups), ncol = length(cell_types),
+                dimnames = list(samples_in_groups, cell_types))
+  # Also keep annotation for samples (their TYPEs) - if a sample appears in both TYPEs,
+  # we mark as "mixed" (but typically sample should map to one TYPE)
+  sample_type <- sapply(samples_in_groups, function(s) {
+    types <- unique(meta$TYPE[meta$Sample_ID == s])
+    if (length(types) == 1) return(types)
+    paste(sort(types), collapse = ";")
+  })
+  sample_annotation <- data.frame(TYPE = sample_type)
+  rownames(sample_annotation) <- samples_in_groups
+
+  # loop through cell types
+  for (ct in cell_types) {
+    genes <- read_deg_for(ct, group1, group2, main_output_dir)
+    if (is.null(genes) || length(genes) == 0) {
+      message(sprintf("  - %s: no DE genes found or file missing", ct))
+      next
+    }
+    # ensure genes exist in expr_mat; if DEGs use gene symbols different than rownames(expr_mat)
+    genes_present <- intersect(genes, rownames(expr_mat))
+    if (length(genes_present) == 0) {
+      warning(sprintf("  - %s: no DE genes present in expression matrix for this cell type (after intersect).", ct))
+      next
+    }
+
+    # For each sample, compute mean expression across DE genes across all cells from that (sample, ct)
+    for (s in samples_in_groups) {
+      # cells that belong to this sample AND this cell type AND are in either group
+      which_cells <- which(meta$Sample_ID == s &
+                           meta$individual_clusters == ct &
+                           meta$TYPE %in% c(group1, group2))
+      if (length(which_cells) == 0) {
+        # leave NA
+        next
+      }
+      # compute average expression for each gene across those cells, then average across genes
+      # be mindful of performance: use matrix subsetting
+      subexpr <- expr_mat[genes_present, which_cells, drop = FALSE]
+      # If only one gene or one cell, rowMeans/colMeans handle that
+      # mean over genes of mean expression per gene across cells:
+      gene_means <- rowMeans(subexpr, na.rm = TRUE)       # mean per gene across cells
+      value <- mean(gene_means, na.rm = TRUE)             # single summary number
+      mat[s, ct] <- value
+    }
+  } # end cell type loop
+
+  # Optionally scale the matrix (z-score rows or columns). Here we z-scale across cell types per sample:
+  mat_scaled <- t(scale(t(mat)))  # scale rows (samples). Use scale(mat) to scale columns.
+  # replace NaN (from constant rows) by 0
+  mat_scaled[is.nan(mat_scaled)] <- NA_real_
+
+  # Prepare annotation colors
+  annotation_colors <- list()
+  types_unique <- unique(sample_annotation$TYPE)
+  pal <- colorRampPalette(brewer.pal(min(8, max(3, length(types_unique))), "Set2"))(length(types_unique))
+  names(pal) <- types_unique
+  annotation_colors$TYPE <- pal
+
+  # Make the heatmap
+  out_name <- sprintf("heatmap_geneset_mean_%s_vs_%s.png", group1, group2)
+  png(out_name, width = 1600, height = 1000, res = 150)
+  pheatmap(mat_scaled,
+           cluster_rows = TRUE,
+           cluster_cols = TRUE,
+           na_col = "grey90",
+           annotation_row = sample_annotation,
+           annotation_colors = annotation_colors,
+           main = sprintf("%s vs %s — sample x celltype mean(DEG expression)", group1, group2),
+           fontsize_row = 8,
+           fontsize_col = 10,
+           show_rownames = TRUE,
+           show_colnames = TRUE,
+           color = colorRampPalette(rev(brewer.pal(n = 7, name = "RdYlBu")))(100))
+  dev.off()
+  cat("Saved heatmap to:", out_name, "\n\n")
+}
+```
+
+# gene columns
+```{r}
+# Packages (install if missing)
+pkgs <- c("Seurat","dplyr","readr","ComplexHeatmap","circlize","RColorBrewer","grid")
+for (p in pkgs) if (!requireNamespace(p, quietly=TRUE)) install.packages(p, repos="https://cloud.r-project.org")
+library(Seurat); library(dplyr); library(readr); library(ComplexHeatmap); library(circlize); library(RColorBrewer); library(grid)
+
+# ---- User inputs ----
+dataObject <- dataObject   # Seurat object must exist in environment
+main_output_dir <- "/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/results/DEGs_RNA_pct0.25"
+out_dir <- "/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/results/heatmap/"
+dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+
+comparisons_to_plot <- list(
+  c("AD_AT",   "CONTROL"),
+  c("LBD_S",   "CONTROL"),
+  c("LBD_AS",  "CONTROL"),
+  c("LBD_ATS", "CONTROL")
+)
+
+cell_types <- c("neuron", "interneuron", "oligodendrocyte",
+                "opc", "astrocyte", "microglia", "mural", "endothelial")
+
+up_logfc_cutoff   <- 0.25
+down_logfc_cutoff <- -0.25
+padj_cutoff       <- 0.05
+top_n_per_ct      <- 20   # <- selecting top 20 DEGs per cell type by |avg_log2FC|
+
+meta <- dataObject@meta.data
+stopifnot(all(c("TYPE","Sample_ID","individual_clusters") %in% colnames(meta)))
+
+# Expression matrix (rows = genes, cols = cells)
+expr_mat <- as.matrix(GetAssayData(dataObject, assay = "RNA", slot = "data"))
+
+# helper: read & return top N genes for a cell type & comparison
+read_top_degs <- function(celltype, g1, g2, top_n = 20) {
+  fname <- file.path(main_output_dir, celltype,
+                     sprintf("DEG_%s_%s_vs_%s.txt", celltype, g1, g2))
+  if (!file.exists(fname)) {
+    warning("Missing DEG file: ", fname)
+    return(character(0))
+  }
+  d <- read_tsv(fname, show_col_types = FALSE)
+  names(d) <- tolower(names(d))
+  if (!"gene" %in% names(d) || !"avg_log2fc" %in% names(d) || !"p_val_adj" %in% names(d)) {
+    stop("DEG file missing expected columns (gene, avg_log2FC, p_val_adj): ", fname)
+  }
+  d <- d %>%
+    filter(!is.na(gene)) %>%
+    filter(p_val_adj <= padj_cutoff) %>%
+    filter(avg_log2fc >= up_logfc_cutoff | avg_log2fc <= down_logfc_cutoff) %>%
+    mutate(abs_lfc = abs(avg_log2fc)) %>%
+    arrange(desc(abs_lfc))
+  if (nrow(d) == 0) return(character(0))
+  top_genes <- unique(d$gene)[seq_len(min(top_n, length(unique(d$gene))))]
+  top_genes
+}
+
+# Loop over comparisons
+for (cmp in comparisons_to_plot) {
+  group1 <- cmp[1]; group2 <- cmp[2]
+  message("Processing: ", group1, " vs ", group2)
+
+  # samples in the groups
+  samples_in_groups <- unique(meta$Sample_ID[meta$TYPE %in% c(group1, group2)])
+  if (length(samples_in_groups) == 0) {
+    warning("No samples for groups: ", group1, ", ", group2); next
+  }
+
+  # Build list of columns = celltype|GENE (top N per cell type)
+  col_list <- character()
+  col_celltype <- character()
+  gene_lookup <- list()
+  for (ct in cell_types) {
+    top_genes <- read_top_degs(ct, group1, group2, top_n = top_n_per_ct)
+    if (length(top_genes) == 0) {
+      message("  - ", ct, ": no top DEGs passing filters")
+      next
+    }
+    # only keep genes present in expr_mat
+    genes_present <- intersect(top_genes, rownames(expr_mat))
+    if (length(genes_present) == 0) {
+      warning("  - ", ct, ": none of the top DEGs exist in expression matrix; skipping those genes")
+      next
+    }
+    cols_ct <- paste0(ct, "|", genes_present)
+    col_list <- c(col_list, cols_ct)
+    col_celltype <- c(col_celltype, rep(ct, length(cols_ct)))
+    for (i in seq_along(cols_ct)) gene_lookup[[ cols_ct[i] ]] <- genes_present[i]
+    message("  - ", ct, ": using ", length(genes_present), " genes (requested ", length(top_genes), ")")
+  }
+
+  if (length(col_list) == 0) {
+    warning("No columns (genes) found for comparison ", group1, " vs ", group2); next
+  }
+
+  # Initialize matrix (samples x columns)
+  mat <- matrix(NA_real_, nrow = length(samples_in_groups), ncol = length(col_list),
+                dimnames = list(samples_in_groups, col_list))
+
+  # Fill matrix: for each sample x (celltype|gene) compute mean expression across cells of that sample & cell type
+  for (colname in col_list) {
+    gene_sym <- gene_lookup[[colname]]
+    ct <- strsplit(colname, "\\|")[[1]][1]
+    for (s in samples_in_groups) {
+      cells_idx <- which(meta$Sample_ID == s &
+                         meta$individual_clusters == ct &
+                         meta$TYPE %in% c(group1, group2))
+      if (length(cells_idx) == 0) next
+      if (!gene_sym %in% rownames(expr_mat)) next
+      vals <- expr_mat[gene_sym, cells_idx, drop = TRUE]
+      mat[s, colname] <- mean(vals, na.rm = TRUE)
+    }
+  }
+
+  # Column-scaling (z-score) for visualization
+  mat_scaled <- mat
+  col_means <- apply(mat, 2, function(x) mean(x, na.rm = TRUE))
+  col_sds   <- apply(mat, 2, function(x) sd(x, na.rm = TRUE))
+  for (j in seq_len(ncol(mat))) {
+    if (is.na(col_sds[j]) || col_sds[j] == 0) {
+      mat_scaled[, j] <- (mat[, j] - col_means[j])  # will be NA or zeros
+    } else {
+      mat_scaled[, j] <- (mat[, j] - col_means[j]) / col_sds[j]
+    }
+  }
+
+  # Column annotation (cell type)
+  col_df <- data.frame(celltype = col_celltype)
+  rownames(col_df) <- col_list
+  ct_levels <- unique(col_df$celltype)
+  ct_pal <- setNames(colorRampPalette(brewer.pal(min(8, max(3, length(ct_levels))), "Set2"))(length(ct_levels)), ct_levels)
+  col_ha <- HeatmapAnnotation(df = col_df, which = "column", col = list(celltype = ct_pal), show_legend = TRUE)
+
+  # Row annotation: TYPE per sample
+  row_df <- data.frame(TYPE = sapply(samples_in_groups, function(s) {
+    types <- unique(meta$TYPE[meta$Sample_ID == s])
+    if (length(types) == 1) return(types)
+    paste(sort(types), collapse = ";")
+  }))
+  rownames(row_df) <- samples_in_groups
+  type_levels <- unique(row_df$TYPE)
+  type_pal <- setNames(colorRampPalette(brewer.pal(min(8, max(3, length(type_levels))), "Set2"))(length(type_levels)), type_levels)
+  row_ha <- rowAnnotation(df = row_df, col = list(TYPE = type_pal))
+
+  # Column split by cell type (keeps genes grouped)
+  column_split <- col_df$celltype
+
+  # Color function for z-scores
+  col_fun <- colorRamp2(c(-2, 0, 2), c("blue", "white", "red"))
+
+  ht <- Heatmap(mat_scaled,
+                name = "zscore",
+                col = col_fun,
+                na_col = "grey90",
+                cluster_rows = TRUE,
+                cluster_columns = TRUE,
+                show_row_names = TRUE,
+                show_column_names = FALSE,
+                row_names_gp = gpar(fontsize = 9),
+                top_annotation = col_ha,
+                left_annotation = row_ha,
+                column_split = column_split,
+                column_title = NULL,
+                heatmap_legend_param = list(title = "z-score"))
+
+  out_png <- file.path(out_dir, sprintf("heatmap_top%d_DEGs_perCT_%s_vs_%s.png", top_n_per_ct, group1, group2))
+  out_pdf <- file.path(out_dir, sprintf("heatmap_top%d_DEGs_perCT_%s_vs_%s.pdf", top_n_per_ct, group1, group2))
+
+  # Save PNG
+  png(out_png, width = 3000, height = 1200, res = 200)
+  draw(ht, merge_legends = TRUE)
+  dev.off()
+
+  # Save PDF
+  pdf(out_pdf, width = 14, height = 8)
+  draw(ht, merge_legends = TRUE)
+  dev.off()
+
+  message("Saved: ", out_png, " and ", out_pdf)
+}
+```

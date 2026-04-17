@@ -13,3 +13,8 @@ cellranger/*
 fastq/*
 nuclear_fraction/*
 shiny_apps/*
+scripts/TOM/*
+cellbender_pdfs/*
+scripts/.snakemake*
+scripts/SRA_info/*
+manuscript_figures/*
