@@ -43,7 +43,7 @@ comparison_map <- tibble(
 
 
 # user inputs / thresholds
-main_output_dir <- "/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/results/DEGs_RNA_pct0.25"
+main_output_dir <- "/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/results/DEGs_MAST_RNA_pct0.25"
 cell_types <- c("neuron", "interneuron", "oligodendrocyte", "opc", "astrocyte", "microglia", "endothelial", "fibroblast", "mural")
 
 up_logfc_cutoff<- 0.25

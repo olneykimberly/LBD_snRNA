@@ -52,10 +52,10 @@ jitter_width_default <- 0.18
 group_levels_raw <- c("CONTROL", "AD_AT", "LBD_S", "LBD_AS", "LBD_ATS")
 group_labels_map <- c(
   CONTROL = "Control",
-  AD_AT   = "AD",
-  LBD_S   = "LBD(S)",
-  LBD_AS  = "LBD(AS)",
-  LBD_ATS = "LBD(ATS)"
+  AD_AT   = "AD (AT)",
+  LBD_S   = "LBD (S)",
+  LBD_AS  = "LBD (AS)",
+  LBD_ATS = "LBD (ATS)"
 )
 group_levels_label <- unname(group_labels_map[group_levels_raw])
 
@@ -140,7 +140,7 @@ for (ct in cell_types) {
       group = { x <- group[!is.na(group)]; if (length(x) == 0) NA_character_ else as.character(x[1]) },
       .groups = "drop"
     )
-
+donor_group
   # module colors (skip grey)
   mods_raw <- GetModules(seu) %>%
     distinct(module, color) %>%

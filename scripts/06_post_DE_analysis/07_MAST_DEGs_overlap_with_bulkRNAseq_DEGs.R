@@ -5,7 +5,7 @@ source("file_paths_and_colours.R")
 genes <- readRDS("../rObjects/annotation.rds")
 protein_coding <- subset(genes, gene_type == "protein_coding")$gene_name
 mt_genes <- subset(genes, seqnames == "chrM")$gene_name
-features_use <- intersect(setdiff(protein_coding, mt_genes), rownames(obj))
+features_use <- intersect(setdiff(protein_coding, mt_genes), rownames(dataObject))
 # ------------------------------------------------------------------------------
 # Read cell-type pathology DEG tables into a named list
 # ------------------------------------------------------------------------------
@@ -35,7 +35,7 @@ deg_tables <- list()   # named list of data.frames
 deg_index  <- list()   # quick metadata / QC log
 
 required_cols <- c("avg_log2FC", "p_val", "p_val_adj", "gene")
-
+cell_types <- c("neuron", "interneuron", "oligodendrocyte", "opc", "astrocyte", "microglia", "endothelial", "fibroblast", "mural")
 for (cell_type in cell_types) {
   for (comp in comparisons) {
     

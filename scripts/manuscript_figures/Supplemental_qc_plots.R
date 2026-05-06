@@ -140,7 +140,7 @@ column_variables <-
   c(
     "Brain weight in grams", 
     "Age in years", 
-    "Lewy bodies per um2", "
+    "Lewy bodies per mm2", "
     Thal amyloid phase", 
     "Braak NFT stage"
     
@@ -148,7 +148,7 @@ column_variables <-
 
 # 1. Label helper for the mu symbol [cite: 23, 30, 61]
 get_label <- function(j) {
-  if (j == "Lewy bodies per um2") {
+  if (j == "Lewy bodies per mm2") {
     return(expression(paste("Lewy bodies per ", mu, m^2)))
   } else {
     return(j)

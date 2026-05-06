@@ -25,7 +25,7 @@ color.panel <- dittoColors()
 
 # add small legend
 ```{r}
-addSmallLegend <- function(myPlot, pointSize = 3, textSize = 8, spaceLegend = 1) {
+addSmallLegend <- function(myPlot, pointSize = 3, textSize = 7, spaceLegend = 1) {
     myPlot +
         guides(shape = guide_legend(override.aes = list(size = pointSize)),
                color = guide_legend(override.aes = list(size = pointSize))) +
@@ -47,12 +47,15 @@ genes_markers <-
     "P2RY12",
     "SYT1",
     "RBFOX3",
- #   "GAD1",
+   "SLC17A7",
+   "SLC17A6",
+   "GAD1",
     "GAD2",
     "EBF1",
     "COL1A2",
     "FLT1", 
-    "ADGRF5"
+    "ADGRF5", 
+    "PDGFRB"
 )
 ```
 
@@ -61,6 +64,56 @@ genes_markers <-
 project_ID <- "CWOW_cellbender"
 dataObject <- readRDS(paste0("../rObjects/", project_ID, "_filtered_subclusters_pass2.rds"))
 Idents(dataObject) <- factor(x = Idents(dataObject), levels = order_cell_type)
+
+# Rename in metadata
+dataObject$cell_type <- dplyr::recode(
+  dataObject$cell_type,
+  "neuron" = "exc. neuron",
+  "interneuron" = "inh. neuron"
+)
+
+# Reset identities
+Idents(dataObject) <- "cell_type"
+
+# Reorder levels (keep your preferred order)
+dataObject$cell_type <- factor(
+  dataObject$cell_type,
+  levels = c(
+    "exc. neuron",
+    "inh. neuron",
+    "oligodendrocyte",
+    "opc",
+    "astrocyte",
+    "microglia",
+    "endothelial",
+    "fibroblast",
+    "mural"
+  )
+)
+
+Idents(dataObject) <- "cell_type"
+
+# Rename in metadata
+# Rename in metadata only
+dataObject$group <- dplyr::recode(
+  dataObject$group,
+  "AD_AT"   = "AD (AT)",
+  "LBD_S"   = "LBD (S)",
+  "LBD_AS"  = "LBD (AS)",
+  "LBD_ATS" = "LBD (ATS)"
+)
+
+# Keep desired order
+dataObject$group <- factor(
+  dataObject$group,
+  levels = c(
+    "CONTROL",
+    "AD (AT)",
+    "LBD (S)",
+    "LBD (AS)",
+    "LBD (ATS)"
+  )
+)
 ```
 
 ### UMAP
@@ -69,13 +122,13 @@ UMAP_plot <- DimPlot(dataObject, reduction = "umap.rpca", label = FALSE, label.s
   xlab("UMAP 1") + 
   ylab("UMAP 2") +
     theme(
-    axis.title.x = element_text(size = 8),
-    axis.text.x = element_text(size = 8),
-    axis.title.y = element_text(size = 8),
-    axis.text.y = element_text(size = 8),
+    axis.title.x = element_text(size = 7),
+    axis.text.x = element_text(size = 7),
+    axis.title.y = element_text(size = 7),
+    axis.text.y = element_text(size = 7),
     legend.position = "none",
-    plot.title = element_text(size = 8),
-    plot.margin = margin(0.5, 0.025, 0.25, 0.025, "cm")
+    plot.title = element_text(size = 8, face = "plain"),
+    plot.margin = margin(0.025, 0.025, 0.25, 0.025, "cm")
   ) +
   guides(colour = guide_legend(override.aes = list(size = 10))) +
   scale_color_manual(values = color.panel)
@@ -116,11 +169,11 @@ count_bar <- ggplot(count_melt, aes(x = factor(cluster), y = `number of nuclei`,
   theme(
      axis.text.x = element_text(size = 7, angle = 25, hjust = 1),
     axis.title.x = element_blank(),
-    axis.title.y = element_text(size = 8),
-    axis.text.y = element_text(size = 8),
+    axis.title.y = element_text(size = 7),
+    axis.text.y = element_text(size = 7),
     legend.position = "none",
     plot.title = element_text(size = 8),
-    plot.margin = margin(0.25, 0.025, 0.25, 0.5, "cm")
+    plot.margin = margin(0.35, 0.025, 0.25, 0.25, "cm")
   ) +
   scale_y_continuous(limits = c(0, cellmax))
 #count_bar <- addSmallLegend(count_bar)
@@ -129,45 +182,69 @@ count_bar
 
 ### DotPlot
 ```{r dotplot}
-# DotPlot with continuous color scale and percent expressed up to 100
-dot_ind <- DotPlot(
-  dataObject,
-  features = genes_markers,
-  cluster.idents = FALSE,
-  dot.scale = 8
-) + 
-  RotatedAxis() +
-  scale_color_distiller(palette = "YlGnBu", direction = 1) +  # continuous color
-  scale_size(range = c(0, 8), limits = c(0, 100)) +           # scale bubbles to 0-100%
-  theme(
-    axis.title.x = element_blank(),
-    axis.text.x = element_text(size = 8),
-    axis.title.y = element_blank(),
-    axis.text.y = element_text(size = 8),
-    plot.title = element_text(size = 8),
-    plot.margin = margin(1, 0.05, 0.25, 0.05, "cm")
-  )
-
-# Optional: small legend function
-addSmallLegend <- function(myPlot, pointSize = 1, textSize = 7, spaceLegend = 0.75) {
+addSmallLegend <- function(myPlot, pointSize = 0.5, textSize = 7, spaceLegend = 0.4) {
   myPlot +
     guides(
-      shape = guide_legend(override.aes = list(size = pointSize)),
-      color = guide_colorbar(title = "Avg Exp")  # use continuous colorbar for avg.exp.scaled
+      color = guide_colorbar(title = "Avg Exp"),
+      size  = guide_legend(
+        title = "% Expressed",
+       # override.aes = list(size = 2)  # 👈 smaller legend dots
+      )
     ) +
     theme(
       legend.title = element_text(size = textSize), 
       legend.text  = element_text(size = textSize),
-      legend.key.size = unit(spaceLegend, "lines")
+      legend.key.size = unit(spaceLegend, "lines"),
+      
+      legend.box.margin = margin(0, 0, 0, 0.25),
+      legend.margin = margin(0, 0.01, 0, 0.7)
     )
 }
 
-dot_ind <- addSmallLegend(dot_ind)
-dot_ind 
+### DotPlot
+dot_ind <- DotPlot(
+  dataObject,
+  features = genes_markers,
+  cluster.idents = FALSE,
+  dot.scale = 3
+) + 
+  RotatedAxis() +
+  scale_color_distiller(palette = "YlGnBu", direction = 1) +
+  ggtitle("Cell type canonical marker expression") +
+  theme(
+    axis.title.x = element_blank(),
+    axis.text.x = element_text(size = 7),
+    axis.title.y = element_blank(),
+    axis.text.y = element_text(size = 7),
+    plot.title = element_text(size = 8, face = "plain"),
+    plot.margin = margin(0.25, 0.025, 0.25, 0.025, "cm"),
+    legend.position = "right",
+    legend.title = element_text(size = 7),
+    legend.text = element_text(size = 7),
+    legend.key.size = unit(0.4, "lines"),
+    legend.margin = margin(0, 0, 0, 0),
+    legend.box.margin = margin(0, 0, 0, 0.01),
+    legend.box.spacing = unit(0.05, "cm"),
+    legend.spacing.x = unit(0.05, "cm")
+  )  +
+  guides(
+    color = guide_colorbar(
+      title = "Avg Exp",
+      barheight = unit(1.4, "cm"),
+      barwidth = unit(0.25, "cm")
+    ),
+    size = guide_legend(
+      title = "% Expressed"
+      # IMPORTANT: do not use override.aes = list(size = 2)
+    )
+  )
+
+dot_ind
 ```
 
-## Relative abundance
+### Relative abundance
 ```{r}
+## Relative abundance
 relative_abundance <- dataObject@meta.data %>%
   group_by(cell_type, group) %>%
   dplyr::count() %>%
@@ -178,56 +255,668 @@ relative_abundance <- dataObject@meta.data %>%
 rel_abun <- ggplot(relative_abundance, aes(x = group, y = percent, fill = cell_type)) +
   geom_col() +
   geom_text(
-    aes(label = ifelse(percent > 5, paste0(round(percent), "%"), "")),
+    aes(label = ifelse(percent > 4, paste0(round(percent), "%"), "")),
     position = position_stack(vjust = 0.5),
     size = 2,
     color = "white"
   ) +
   scale_fill_manual(values = color.panel) +
   ggtitle("Relative abundance") +
-  theme_bw() +
+  theme_classic() +
   theme(
     axis.text.x = element_text(size = 7, angle = 25, hjust = 1),
     axis.title.x = element_blank(),
-    axis.title.y = element_text(size = 8),
-    axis.text.y = element_text(size = 8),
-    legend.position = "none",
-    plot.title = element_text(size = 8),
-    plot.margin = margin(0.25, 0.25, 0.25, 0.5, "cm")
+    axis.title.y = element_text(size = 7),
+    axis.text.y = element_text(size = 7),
+    plot.title = element_text(size = 8, face = "plain"),
+    plot.margin = margin(0.25, 0, 0.25, 0.025, "cm"),
+
+    # move legend closer to Panel D
+    legend.position = "right",
+    legend.title = element_text(size = 7),
+    legend.text = element_text(size = 7),
+    legend.key.size = unit(0.35, "lines"),
+    legend.margin = margin(0, 0, 0, 0.05),
+    legend.box.margin = margin(0, 0.05, 0, 0.01),
+    legend.box.spacing = unit(0.02, "cm"),
+    legend.spacing.x = unit(0.02, "cm")
+  ) +
+  guides(
+    fill = guide_legend(
+      title = "cell_type",
+      keyheight = unit(0.35, "lines"),
+      keywidth = unit(0.35, "lines")
+    )
   )
 
-rel_abun <- addSmallLegend(rel_abun)
 rel_abun
 ```
 
-# Figure 1 - combined
+### DEG count
+```{r}
+library(dplyr)
+library(readr)
+library(purrr)
+library(ggplot2)
+library(forcats)
+library(tidyr)
+library(stringr)
+library(patchwork)
+library(grid)
+
+# -----------------------------
+# Helper functions
+# -----------------------------
+
+addSmallLegend <- function(myPlot, pointSize = 1, textSize = 7, spaceLegend = 0.5) {
+  myPlot +
+    guides(
+      shape = guide_legend(override.aes = list(size = pointSize)),
+      color = guide_legend(override.aes = list(size = pointSize))
+    ) +
+    theme(
+      legend.title = element_text(size = textSize), 
+      legend.text  = element_text(size = textSize),
+      legend.key.size = unit(spaceLegend, "lines"),
+      legend.margin = margin(t = 0, r = 0, b = 0, l = -0.25, unit = "cm")
+    )
+}
+
+safe_read_deg <- safely(function(path) {
+  ext <- tools::file_ext(path)
+
+  if (ext == "csv") {
+    readr::read_csv(path, show_col_types = FALSE)
+  } else {
+    readr::read_tsv(path, show_col_types = FALSE)
+  }
+}, otherwise = NULL)
+
+# -----------------------------
+# Label mappings
+# -----------------------------
+
+group_label_map <- c(
+  "CONTROL" = "CONTROL",
+  "AD_AT"   = "AD (AT)",
+  "LBD_S"   = "LBD (S)",
+  "LBD_AS"  = "LBD (AS)",
+  "LBD_ATS" = "LBD (ATS)"
+)
+
+cell_type_label_map <- c(
+  "neuron" = "exc. neuron",
+  "interneuron" = "inh. neuron",
+  "oligodendrocyte" = "oligodendrocyte",
+  "opc" = "opc",
+  "astrocyte" = "astrocyte",
+  "microglia" = "microglia",
+  "endothelial" = "endothelial",
+  "fibroblast" = "fibroblast",
+  "mural" = "mural"
+)
+
+cell_types_raw <- c(
+  "neuron",
+  "interneuron",
+  "oligodendrocyte",
+  "opc",
+  "astrocyte",
+  "microglia",
+  "endothelial",
+  "fibroblast",
+  "mural"
+)
+
+cell_types_plot <- c(
+  "exc. neuron",
+  "inh. neuron",
+  "oligodendrocyte",
+  "opc",
+  "astrocyte",
+  "microglia",
+  "endothelial",
+  "fibroblast",
+  "mural"
+)
+
+# -----------------------------
+# Comparisons to plot
+# -----------------------------
+
+comparisons_to_plot <- list(
+  c("AD_AT", "CONTROL"),
+  c("LBD_S", "CONTROL"),
+  c("LBD_AS", "CONTROL"),
+  c("LBD_ATS", "CONTROL")
+)
+
+plot_order <- comparisons_to_plot %>% 
+  map_chr(~ paste0(.x[1], "_vs_", .x[2]))
+
+plot_labels <- comparisons_to_plot %>%
+  map_chr(~ paste0(group_label_map[.x[1]], " vs ", group_label_map[.x[2]]))
+
+comparison_map <- tibble(
+  comparison = plot_order,
+  plot_label = plot_labels
+)
+
+# -----------------------------
+# User inputs / thresholds
+# -----------------------------
+
+main_output_dir <- "/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/results/DEGs_MAST_RNA_pct0.25"
+
+up_logfc_cutoff <- 0.25
+down_logfc_cutoff <- -0.25
+padj_cutoff <- 0.05
+
+# -----------------------------
+# Find DEG files
+# -----------------------------
+
+all_files <- list.files(
+  main_output_dir,
+  pattern = "^DEG_.*_vs_.*\\.(txt|csv|tsv)$",
+  recursive = TRUE,
+  full.names = TRUE
+)
+
+if (length(all_files) == 0) {
+  stop("No DEG files found under main_output_dir with pattern 'DEG_*_vs_*'")
+}
+
+file_df <- tibble(path = all_files) %>%
+  mutate(
+    bn = basename(path),
+    noext = tools::file_path_sans_ext(bn),
+    after_deg = str_remove(noext, "^DEG_")
+  ) %>%
+  mutate(
+    cell_type = word(after_deg, 1, sep = fixed("_")),
+    rest = str_remove(after_deg, paste0("^", cell_type, "_")),
+    comparison = rest
+  ) %>%
+  select(path, cell_type, comparison) %>%
+  filter(cell_type %in% cell_types_raw) %>%
+  filter(comparison %in% plot_order)
+
+# -----------------------------
+# Read DEG files and count up/down
+# -----------------------------
+
+deg_long <- file_df %>%
+  mutate(data = map(path, ~ safe_read_deg(.x)$result)) %>%
+  filter(map_lgl(data, ~ !is.null(.x))) %>%
+  select(-path) %>%
+  unnest(data) %>%
+  rename_with(~ tolower(.x)) %>%
+  mutate(
+    direction = case_when(
+      !is.na(p_val_adj) & !is.na(avg_log2fc) &
+        p_val_adj <= padj_cutoff & avg_log2fc >= up_logfc_cutoff ~ "Up",
+
+      !is.na(p_val_adj) & !is.na(avg_log2fc) &
+        p_val_adj <= padj_cutoff & avg_log2fc <= down_logfc_cutoff ~ "Down",
+
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  filter(!is.na(direction)) %>%
+  dplyr::count(comparison, cell_type, direction, name = "n")
+
+# -----------------------------
+# Fill missing combinations
+# -----------------------------
+
+all_combinations <- expand_grid(
+  comparison = plot_order,
+  cell_type = cell_types_raw,
+  direction = c("Down", "Up")
+)
+
+deg_counts <- all_combinations %>%
+  left_join(deg_long, by = c("comparison", "cell_type", "direction")) %>%
+  mutate(n = replace_na(n, 0)) %>%
+  mutate(value = if_else(direction == "Down", -n, n)) %>%
+  mutate(
+    cell_type = recode(cell_type, !!!cell_type_label_map),
+    cell_type = factor(cell_type, levels = rev(cell_types_plot))
+  ) %>%
+  left_join(comparison_map, by = "comparison") %>%
+  mutate(plot_label = factor(plot_label, levels = plot_labels))
+
+# -----------------------------
+# Plot
+# -----------------------------
+
+max_count <- max(deg_counts$n, na.rm = TRUE)
+max_abs_x <- ceiling(max_count * 1.5 / 10) * 10
+
+final_plot <- ggplot(deg_counts, aes(x = value, y = cell_type, fill = direction)) +
+  geom_col(width = 0.7) +
+  geom_text(
+    data = deg_counts %>% filter(n > 0),
+    aes(label = as.character(n), x = value),
+    hjust = ifelse((deg_counts %>% filter(n > 0))$value < 0, 1.1, -0.1),
+    size = 2.5,
+    color = "black"
+  ) +
+  scale_fill_manual(values = c("Down" = "blue", "Up" = "red")) +
+  scale_x_continuous(
+    labels = function(x) abs(x),
+    limits = c(-max_abs_x, max_abs_x)
+  ) +
+  facet_grid(. ~ plot_label) +
+  labs(
+    title = "",
+    x = NULL,
+    y = NULL,
+    fill = "Direction"
+  ) +
+    ggtitle("Number of DEGs per cell type\nadjusted p-value < 0.05 & |log2FC| > 0.25") +
+  theme_classic() +
+  theme(
+    axis.text.x = element_blank(),
+    axis.title.x = element_text(size = 7),
+    axis.title.y = element_text(size = 7),
+    axis.text.y = element_text(size = 7),
+    plot.title = element_text(size = 7, face = "plain"),
+    axis.ticks.y = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_blank(),
+    strip.background = element_rect(fill = "gray90", color = NA),
+    strip.text = element_text(face = "plain", size = 7),
+    legend.margin = margin(t = 0, r = 0.25, b = 0, l = 0, unit = "cm"),
+    plot.margin = margin(0.2, 0.025, 0.25, 0.05, "cm")
+  )
+
+final_plot <- addSmallLegend(final_plot)
+
+print(final_plot)
+```
+
+### DEG overlap with bulk 
+```{r}
+# ============================================================
+# Faceted plot: total overlapping DEGs
+# bulk RNAseq DEGs vs snRNA-seq cell-type DEGs
+# Disease vs Control comparisons only
+# ============================================================
+
+setwd("/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/scripts/")
+source("file_paths_and_colours.R")
+
+suppressPackageStartupMessages({
+  library(dplyr)
+  library(ggplot2)
+  library(scales)
+})
+
+# ------------------------------------------------------------
+# Parameters
+# ------------------------------------------------------------
+qval <- 0.05
+FC   <- 0.25
+
+sn_deg_base_dir <- "../results/DEGs_MAST_RNA_pct0.25"
+
+out_dir <- "../results/DEG_overlap_bulk_vs_sn_faceted"
+dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+
+cell_types <- c(
+  "neuron",
+  "interneuron",
+  "oligodendrocyte",
+  "opc",
+  "astrocyte",
+  "microglia",
+  "endothelial",
+  "fibroblast",
+  "mural"
+)
+
+cell_type_labels <- c(
+  "neuron" = "exc. neuron",
+  "interneuron" = "inh. neuron",
+  "oligodendrocyte" = "oligodendrocyte",
+  "opc" = "opc",
+  "astrocyte" = "astrocyte",
+  "microglia" = "microglia",
+  "endothelial" = "endothelial",
+  "fibroblast" = "fibroblast",
+  "mural" = "mural"
+)
+
+# Make sure colors are named by original cell type
+color_panel <- color_panel[seq_along(cell_types)]
+names(color_panel) <- cell_types
+
+# ------------------------------------------------------------
+# Comparisons to include in faceted plot
+# ------------------------------------------------------------
+comparisons_df <- tibble::tribble(
+  ~comparison,             ~sn_A,      ~sn_B,      ~bulk_file,                                                        ~facet_label,
+  "AD_vs_control",         "AD_AT",    "CONTROL", "TYPE_ADvsControl_gene_DEGs_FDRq0.05_logFC_0.25.txt",              "AD (AT) vs Control",
+  "LBD_S_vs_control",      "LBD_S",    "CONTROL", "LBD_redefined_LBD_S_vs_Control_gene_DEGs_FDRq0.05_logFC_0.25.txt",   "LBD (S) vs Control",
+  "LBD_AS_vs_control",     "LBD_AS",   "CONTROL", "LBD_redefined_LBD_AS_vs_Control_gene_DEGs_FDRq0.05_logFC_0.25.txt",  "LBD (AS) vs Control",
+  "LBD_ATS_vs_control",    "LBD_ATS",  "CONTROL", "LBD_redefined_LBD_ATS_vs_Control_gene_DEGs_FDRq0.05_logFC_0.25.txt", "LBD (ATS) vs Control"
+)
+
+comparisons_df$facet_label <- factor(
+  comparisons_df$facet_label,
+  levels = comparisons_df$facet_label
+)
+
+# ------------------------------------------------------------
+# Bulk DEG directories
+# ------------------------------------------------------------
+bulk_dirs <- c(
+  "/tgen_labs/jfryer/kolney/LBD_CWOW/bulkRNA/results/star/DEGs",
+  "/tgen_labs/jfryer/kolney/LBD_CWOW/bulkRNA/results/star_LBD_redefined/DEGs"
+)
+
+resolve_first_existing <- function(fname, dirs) {
+  paths <- file.path(dirs, fname)
+  ok <- file.exists(paths)
+  if (!any(ok)) return(NA_character_)
+  paths[which(ok)[1]]
+}
+
+read_bulk_deg <- function(file_path) {
+  df <- read.delim(
+    file_path,
+    sep = "\t",
+    header = TRUE,
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
+
+  req <- c("gene_name", "logFC")
+  miss <- setdiff(req, colnames(df))
+  if (length(miss) > 0) {
+    stop("Missing required columns in bulk file: ",
+         paste(miss, collapse = ", "),
+         "\nFile: ", file_path)
+  }
+
+  df <- df %>%
+    mutate(
+      gene = as.character(gene_name),
+      logFC = suppressWarnings(as.numeric(logFC))
+    ) %>%
+    filter(!is.na(gene), gene != "", !is.na(logFC))
+
+  # If duplicated gene names exist, keep row with largest absolute logFC
+  df <- df %>%
+    arrange(gene, desc(abs(logFC))) %>%
+    distinct(gene, .keep_all = TRUE)
+
+  df
+}
+
+read_sn_deg <- function(cell_type, A, B) {
+  file_name <- paste0("DEG_", cell_type, "_", A, "_vs_", B, ".tsv")
+  file_path <- file.path(sn_deg_base_dir, cell_type, file_name)
+
+  if (!file.exists(file_path)) {
+    message("Missing snRNA DEG file: ", file_path)
+    return(NULL)
+  }
+
+  df <- read.delim(
+    file_path,
+    sep = "\t",
+    header = TRUE,
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
+
+  req <- c("gene", "avg_log2FC", "p_val_adj")
+  miss <- setdiff(req, colnames(df))
+  if (length(miss) > 0) {
+    message("Skipping snRNA file because missing columns: ",
+            paste(miss, collapse = ", "),
+            "\nFile: ", file_path)
+    return(NULL)
+  }
+
+  df %>%
+    mutate(
+      gene = as.character(gene),
+      avg_log2FC = suppressWarnings(as.numeric(avg_log2FC)),
+      p_val_adj = suppressWarnings(as.numeric(p_val_adj))
+    ) %>%
+    filter(
+      !is.na(gene),
+      gene != "",
+      !is.na(avg_log2FC),
+      !is.na(p_val_adj)
+    )
+}
+
+get_sn_sig_genes <- function(cell_type, A, B, qval = 0.05, FC = 0.25) {
+  df <- read_sn_deg(cell_type, A, B)
+
+  if (is.null(df)) return(character(0))
+
+  df %>%
+    filter(p_val_adj < qval, abs(avg_log2FC) > FC) %>%
+    pull(gene) %>%
+    unique()
+}
+
+# ------------------------------------------------------------
+# Calculate overlap counts
+# ------------------------------------------------------------
+overlap_df <- list()
+
+for (i in seq_len(nrow(comparisons_df))) {
+
+  comp <- comparisons_df[i, ]
+
+  bulk_path <- resolve_first_existing(comp$bulk_file, bulk_dirs)
+
+  if (is.na(bulk_path)) {
+    message("Missing bulk DEG file for: ", comp$comparison)
+    next
+  }
+
+  bulk_df <- read_bulk_deg(bulk_path)
+  bulk_genes <- unique(bulk_df$gene)
+
+  comp_overlap <- lapply(cell_types, function(ct) {
+
+    sn_genes <- get_sn_sig_genes(
+      cell_type = ct,
+      A = comp$sn_A,
+      B = comp$sn_B,
+      qval = qval,
+      FC = FC
+    )
+
+    shared_genes <- intersect(sn_genes, bulk_genes)
+
+    data.frame(
+      comparison = comp$comparison,
+      facet_label = as.character(comp$facet_label),
+      cell_type = ct,
+      cell_type_label = cell_type_labels[[ct]],
+      n_sn_DEGs = length(sn_genes),
+      n_bulk_DEGs = length(bulk_genes),
+      n_overlap = length(shared_genes),
+      genes_overlap = paste(sort(shared_genes), collapse = ";"),
+      stringsAsFactors = FALSE
+    )
+  }) %>%
+    bind_rows()
+
+  overlap_df[[comp$comparison]] <- comp_overlap
+}
+
+overlap_df <- bind_rows(overlap_df)
+
+# ------------------------------------------------------------
+# Clean factors
+# ------------------------------------------------------------
+overlap_df <- overlap_df %>%
+  mutate(
+    facet_label = factor(
+      facet_label,
+      levels = as.character(comparisons_df$facet_label)
+    ),
+    cell_type = factor(cell_type, levels = cell_types),
+    cell_type_label = factor(
+      cell_type_label,
+      levels = rev(cell_type_labels[cell_types])
+    )
+  )
+
+# ------------------------------------------------------------
+# Save overlap table
+# ------------------------------------------------------------
+write.table(
+  overlap_df,
+  file = file.path(out_dir, "bulk_vs_sn_overlap_counts_disease_vs_control.tsv"),
+  sep = "\t",
+  quote = FALSE,
+  row.names = FALSE
+)
+
+# Optional wide table of counts
+overlap_counts_wide <- overlap_df %>%
+  select(facet_label, cell_type_label, n_overlap) %>%
+  tidyr::pivot_wider(
+    names_from = facet_label,
+    values_from = n_overlap
+  )
+
+write.table(
+  overlap_counts_wide,
+  file = file.path(out_dir, "bulk_vs_sn_overlap_counts_disease_vs_control_wide.tsv"),
+  sep = "\t",
+  quote = FALSE,
+  row.names = FALSE
+)
+
+# ------------------------------------------------------------
+# Faceted plot: total overlapping DEGs
+# ------------------------------------------------------------
+p_overlap <- ggplot(
+  overlap_df,
+  aes(
+    x = n_overlap,
+    y = cell_type_label,
+    fill = cell_type
+  )
+) +
+  geom_col(width = 0.75) +
+  geom_text(
+    aes(label = n_overlap),
+    hjust = -0.15,
+    size = 2.5
+  ) +
+  facet_wrap(
+    ~ facet_label,
+    ncol = 4
+  ) +
+  scale_fill_manual(values = color_panel) +
+  scale_x_continuous(
+    expand = expansion(mult = c(0, 0.15))
+  ) +
+  labs(
+    title = "Total overlapping DEGs between bulk RNA-seq and snRNA-seq",
+    x = NULL,
+    y = NULL
+  ) +
+  theme_classic() +
+  scale_x_continuous(
+    limits = c(0, 450),
+    expand = expansion(mult = c(0, 0.05))) +
+  theme(
+    axis.text.x = element_text(size = 7),
+    axis.title.x = element_text(size = 7),
+    axis.title.y = element_text(size = 7),
+    axis.text.y = element_text(size = 7),
+    plot.title = element_text(size = 7, face = "plain"),
+    axis.ticks.y = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_blank(),
+    legend.position = "none",
+    strip.background = element_rect(fill = "gray90", color = NA),
+    strip.text = element_text(face = "plain", size = 7),
+    plot.margin = margin(0.25, 0.75, 0.05, 0.05, "cm")
+    )
+
+p_overlap
+
+# ------------------------------------------------------------
+# Save plot
+# ------------------------------------------------------------
+ggsave(
+  filename = file.path(out_dir, "bulk_vs_sn_total_overlapping_DEGs_faceted.pdf"),
+  plot = p_overlap,
+  width = 7,
+  height = 5,
+  useDingbats = FALSE
+)
+
+ggsave(
+  filename = file.path(out_dir, "bulk_vs_sn_total_overlapping_DEGs_faceted.png"),
+  plot = p_overlap,
+  width = 7,
+  height = 5,
+  dpi = 300
+)
+```
+
+# Figure 1 and supplmental cell type proportions 
 ```{r}
 row1 <-
   ggarrange(
     UMAP_plot,
-    count_bar,
+    dot_ind,
     ncol = 2,
     labels = c("A","B"), 
+    widths = c(0.85, 1.35),
   font.label = list(size = 10)
     )
 
 row2 <- ggarrange(
-    dot_ind,
-    rel_abun, 
-    ncol = 2, 
-    widths =  c(2, .85),
-    labels = c("C", "D"), 
+   final_plot,
+    labels = c("C"), 
   font.label = list(size = 10)
     )
-  
+
+row3 <- ggarrange(
+   p_overlap,
+    labels = c("D"), 
+  font.label = list(size = 10)
+    )  
+
 row_combined <- 
    ggarrange(
     row1,
     row2,
-    nrow=2
+    row3,
+    nrow=3
     )
 row_combined
-path <- paste0("../manuscript_figures/Figure_1_UMAP")
-saveToPDF(paste0(path, ".pdf"), width = 7, height = 5.5)
+path <- paste0("../manuscript_figures/Figure_1_UMAP_DEG_count_overlap_with_bulk")
+saveToPDF(paste0(path, ".pdf"), width = 6.5, height = 7)
+
+
+
+supplemental <- ggarrange(
+    count_bar,
+    rel_abun, 
+    ncol = 2, 
+    labels = c("A", "B"), 
+  font.label = list(size = 10))
+supplemental
+path <- paste0("../manuscript_figures/Supplemental_cell_type_proportions")
+saveToPDF(paste0(path, ".pdf"), width = 6.5, height = 3)
 ```
 #-----------------------
+
