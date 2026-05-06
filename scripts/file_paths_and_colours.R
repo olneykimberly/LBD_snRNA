@@ -93,15 +93,15 @@ shape_PA <- c(17) # triangle
 shape_LBD <- c(18) # diamond
 
 color_type <- c("#4682B4","#B4464B", "gray35")
-color_ATS <- c("#4682B4","#B4464B", "gray","gray65", "gray35")
+color_ATS <- c("#4682B4","#B4464B", "gray","#88778D", "gray10")
 color_sex <- c("#490092", "#D55E00")
 color_blind <- dittoColors()
 color_panel <- dittoColors()
 sample_colors <- c("#4682B4","#4682B4","#4682B4","#4682B4","#4682B4","#4682B4","#4682B4",
                    "#B4464B","#B4464B","#B4464B","#B4464B","#B4464B","#B4464B","#B4464B","#B4464B",
                    "gray","gray","gray","gray","gray","gray","gray",
-                   "gray65","gray65","gray65","gray65","gray65","gray65","gray65",
-                   "gray35","gray35","gray35","gray35","gray35","gray35")
+                   "#88778D","#88778D","#88778D","#88778D","#88778D","#88778D","#88778D",
+                   "gray10","gray10","gray10","gray10","gray10","gray10")
 order_cell_type <- c("neuron", "interneuron", "oligodendrocyte", "opc",  "astrocyte", "microglia", "endothelial", "fibroblast", "mural")
 
 #--- references and metadata
