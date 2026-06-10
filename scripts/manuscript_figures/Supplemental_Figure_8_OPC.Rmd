@@ -37,7 +37,7 @@ output_dir <- "/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/results/circos_DEG_ov
 
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
-celltype <- "interneuron"
+celltype <- "opc"
 
 logfc_cutoff <- 0.25
 padj_cutoff <- 0.05
@@ -380,34 +380,38 @@ comparisons_to_plot <- list(
 cell_types <- order_cell_type
 ```
 # Metascape
-### Exc Neuron
 ### UP
 ```{r}
-getwd()
 # read in enrichment analysis results
 shared_up_enrich_results <-
-  read.csv("../results/metascape_multilist_MAST_DEGs/neuron_Disease_vs_CONTROL_upregulated/Enrichment_heatmap/HeatmapSelectedGO.csv")
-shared_up_enrich_results$Description <-
-      gsub(
-       "Diseases of signal transduction by growth factor receptors and second messengers",
-        "Diseases of signal transduction",
-        shared_up_enrich_results$Description
-      )
+  read.csv("../results/metascape_multilist_MAST_DEGs/opc_Disease_vs_CONTROL_upregulated/Enrichment_heatmap/HeatmapSelectedGO.csv")
 shared_up_enrich_results$Description <-
       gsub(
        "negative regulation of cellular component organization",
         "neg reg of cellular component organization",
         shared_up_enrich_results$Description
       )
+shared_up_enrich_results$Description <-
+      gsub(
+       "regulation of plasma membrane bounded cell projection organization",
+        "reg plasma membrane bounded cell proj org",
+        shared_up_enrich_results$Description
+      )
 
 
 shared_up_enrich_results$Description <-
       gsub(
-       "Signaling by Rho GTPases, Miro GTPases and RHOBTB3",
-        "Signaling by Rho & Miro GTPases, RHOBTB3",
+       "positive regulation of cellular component biogenesis",
+        "pos reg of cellular component biogenesis",
         shared_up_enrich_results$Description
       )
 
+shared_up_enrich_results$Description <-
+      gsub(
+       "Signaling by Rho GTPases, Miro GTPases and RHOBTB3",
+        "Signaling Rho & Miro GTPases, RHOBTB3",
+        shared_up_enrich_results$Description
+      )
 
 shared_up_enrich_results$Description <- factor(shared_up_enrich_results$Description, levels = shared_up_enrich_results$Description)
 shared_up_enrich_results <- reshape2::melt(shared_up_enrich_results)
@@ -449,10 +453,10 @@ shared_up_enric_heatmap <-
   )) +
   scale_fill_gradientn(
     colours = c("#800026FF","#FD8D3CFF", "#FFFFCCFF"),
-    values = scales::rescale(c(-70, -35, -20, -10, -1)), 
-    breaks = c(-70, -35, -20, -10, -1), 
+    values = scales::rescale(c(-35, -20, -10, -1)), 
+    breaks = c(-35, -20, -10, -1), 
     guide = "legend",
-    limits = c(-70,-1)
+    limits = c(-35,-1)
   ) +  theme_bw() +
     theme(strip.text = element_text(size = 7), 
           axis.text.y = element_text(size = 7),
@@ -484,11 +488,32 @@ shared_up_enric_heatmap
 ```{r down_heat}
 #--------
 # down
-shared_down_enrich_results <- read.csv("../results/metascape_multilist_MAST_DEGs/interneuron_Disease_vs_CONTROL_downregulated/Enrichment_heatmap/HeatmapSelectedGO.csv")
+shared_down_enrich_results <- read.csv("../results/metascape_multilist_MAST_DEGs/opc_Disease_vs_CONTROL_downregulated/Enrichment_heatmap/HeatmapSelectedGO.csv")
 shared_down_enrich_results$Description <-
       gsub(
-       "plasma membrane bounded cell projection assembly",
-        "plasma membrane bounded cell projection",
+       "regulation of postsynaptic membrane neurotransmitter receptor levels",
+        "reg of postsynaptic neurotransmitter",
+        shared_down_enrich_results$Description
+      )
+
+shared_down_enrich_results$Description <-
+      gsub(
+       "cell surface receptor protein tyrosine kinase signaling pathway",
+        "cell surface receptor protein tyrosine kinase",
+        shared_down_enrich_results$Description
+      )
+
+shared_down_enrich_results$Description <-
+      gsub(
+       "negative regulation of cellular component organization",
+        "neg reg of cellular component organization",
+        shared_down_enrich_results$Description
+      )
+
+shared_down_enrich_results$Description <-
+      gsub(
+       "regulation of small GTPase mediated signal transduction",
+        "reg small GTPase mediated signal transduction",
         shared_down_enrich_results$Description
       )
 
@@ -534,10 +559,10 @@ shared_down_enric_heatmap <-
   )) +
   scale_fill_gradientn(
     colours = c("#0e406bff","#5CACEE", "#CAE1FF"),
-    values = scales::rescale(c(-70, -35, -20, -10, -1)), 
-    breaks = c(-70, -35, -20, -10, -1), 
+    values = scales::rescale(c(-35, -20, -10, -1)), 
+    breaks = c(-35, -20, -10, -1), 
     guide = "legend",
-    limits = c(-70,-1)
+    limits = c(-35,-1)
     ) + theme_bw() +
     theme(strip.text = element_text(size = 7), 
           axis.text.y = element_text(size = 7),
@@ -608,12 +633,12 @@ safe_read_deg <- safely(function(path) {
 # -----------------------------
 
 main_output_dir <- "/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/results/DEGs_MAST_RNA_pct0.25"
-output_dir <- "/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/results/DEG_bidirectional_inh_neuron"
+output_dir <- "/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/results/DEG_bidirectional_opc"
 
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
-celltype_raw <- "interneuron"
-celltype_plot <- "inh. neuron"
+celltype_raw <- "opc"
+celltype_plot <- "opc"
 
 up_logfc_cutoff <- 0.25
 down_logfc_cutoff <- -0.25
@@ -754,7 +779,7 @@ if (max_abs_x == 0) {
 # -----------------------------
 deg_counts
 
-p_exc_neuron <- ggplot(
+p_opc <- ggplot(
   deg_counts,
   aes(x = value, y = celltype_plot, fill = direction)
 ) +
@@ -780,7 +805,7 @@ p_exc_neuron <- ggplot(
     )
   ) +
 
-  # 🔥 UPDATED AXIS
+  
   scale_x_continuous(
     limits = c(-5500, 5500),
     breaks = c(-2000, 0, 2000),
@@ -794,7 +819,7 @@ p_exc_neuron <- ggplot(
   ) +
 
   labs(
-    title = "Number of DEGs in exc. neuron\nadjusted p-value < 0.05 & |log2FC| > 0.25",
+    title = "Number of DEGs in opc\nadjusted p-value < 0.05 & |log2FC| > 0.25",
     x = NULL,
     y = NULL,
     fill = "Direction"
@@ -821,17 +846,17 @@ p_exc_neuron <- ggplot(
     plot.margin = margin(0.2, 0.025, 0.25, 0.05, "cm")  # 🔥 slightly wider margins
   )
 
-p_exc_neuron <- addSmallLegend(p_exc_neuron)
+p_opc <- addSmallLegend(p_opc)
 
-print(p_exc_neuron)
+print(p_opc)
 
 # -----------------------------
 # Save plot
 # -----------------------------
 
 ggsave(
-  filename = file.path(output_dir, paste0(celltype_raw, "_bidirectional_DEG_counts_exc_neuron.pdf")),
-  plot = p_exc_neuron,
+  filename = file.path(output_dir, paste0(celltype_raw, "_bidirectional_DEG_counts_opc.pdf")),
+  plot = p_opc,
   width = 4,
   height = 5,
   units = "in",
@@ -839,8 +864,8 @@ ggsave(
 )
 
 ggsave(
-  filename = file.path(output_dir, paste0(celltype_raw, "_bidirectional_DEG_counts_exc_neuron.png")),
-  plot = p_exc_neuron,
+  filename = file.path(output_dir, paste0(celltype_raw, "_bidirectional_DEG_counts_opc.png")),
+  plot = p_opc,
   width = 4,
   height = 5,
   units = "in",
@@ -852,7 +877,7 @@ ggsave(
 ```{r}
 # Combined
 row1 <- ggarrange(
-  p_exc_neuron,
+  p_opc,
   NULL,
   NULL, 
   ncol = 3,
@@ -875,6 +900,18 @@ Figure2_neuron <- ggarrange(
   font.label = list(size = 10))
 
 Figure2_neuron
-path <- paste0("/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/manuscript_figures/Figure_2_GO_excitatory_neuron")
+path <- paste0("/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/manuscript_figures/Supplemental_Figure_opc")
 saveToPDF(paste0(path, ".pdf"), width = 6.5, height = 4.5)
+
+row2
+row2 <- ggarrange(
+  shared_down_enric_heatmap,
+  shared_up_enric_heatmap,
+  ncol = 2,
+  labels = c("A", "B"), 
+  font.label = list(size = 10)
+)
+row2
+path <- paste0("/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/manuscript_figures/Supplemental_Figure_opc_GO_only")
+saveToPDF(paste0(path, ".pdf"), width = 6.5, height = 3.5)
 ```

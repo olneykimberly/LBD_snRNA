@@ -386,28 +386,34 @@ cell_types <- order_cell_type
 getwd()
 # read in enrichment analysis results
 shared_up_enrich_results <-
-  read.csv("../results/metascape_multilist_MAST_DEGs/neuron_Disease_vs_CONTROL_upregulated/Enrichment_heatmap/HeatmapSelectedGO.csv")
-shared_up_enrich_results$Description <-
-      gsub(
-       "Diseases of signal transduction by growth factor receptors and second messengers",
-        "Diseases of signal transduction",
-        shared_up_enrich_results$Description
-      )
+  read.csv("../results/metascape_multilist_MAST_DEGs/interneuron_Disease_vs_CONTROL_upregulated/Enrichment_heatmap/HeatmapSelectedGO.csv")
 shared_up_enrich_results$Description <-
       gsub(
        "negative regulation of cellular component organization",
         "neg reg of cellular component organization",
         shared_up_enrich_results$Description
       )
+shared_up_enrich_results$Description <-
+      gsub(
+       "regulation of plasma membrane bounded cell projection organization",
+        "reg plasma membrane bounded cell proj org",
+        shared_up_enrich_results$Description
+      )
 
 
 shared_up_enrich_results$Description <-
       gsub(
-       "Signaling by Rho GTPases, Miro GTPases and RHOBTB3",
-        "Signaling by Rho & Miro GTPases, RHOBTB3",
+       "positive regulation of cellular component biogenesis",
+        "pos reg of cellular component biogenesis",
         shared_up_enrich_results$Description
       )
 
+shared_up_enrich_results$Description <-
+      gsub(
+       "Signaling by Rho GTPases, Miro GTPases and RHOBTB3",
+        "Signaling Rho & Miro GTPases, RHOBTB3",
+        shared_up_enrich_results$Description
+      )
 
 shared_up_enrich_results$Description <- factor(shared_up_enrich_results$Description, levels = shared_up_enrich_results$Description)
 shared_up_enrich_results <- reshape2::melt(shared_up_enrich_results)
@@ -794,7 +800,7 @@ p_exc_neuron <- ggplot(
   ) +
 
   labs(
-    title = "Number of DEGs in exc. neuron\nadjusted p-value < 0.05 & |log2FC| > 0.25",
+    title = "Number of DEGs in inh. neuron\nadjusted p-value < 0.05 & |log2FC| > 0.25",
     x = NULL,
     y = NULL,
     fill = "Direction"
@@ -875,6 +881,6 @@ Figure2_neuron <- ggarrange(
   font.label = list(size = 10))
 
 Figure2_neuron
-path <- paste0("/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/manuscript_figures/Figure_2_GO_excitatory_neuron")
+path <- paste0("/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/manuscript_figures/Supplemental_Figure_inh_neuron")
 saveToPDF(paste0(path, ".pdf"), width = 6.5, height = 4.5)
 ```
