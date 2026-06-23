@@ -1,0 +1,1234 @@
+---
+title: "Untitled"
+output: html_document
+date: "2025-12-02"
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = "/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/scripts/")
+setwd("/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/scripts/")
+```
+
+# Libraris, paths, colors
+```{r echo=FALSE, message=FALSE}
+source(here::here("/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/scripts/", "file_paths_and_colours.R"))
+color.panel <- dittoColors()
+```
+
+## Circos plot
+```{r}
+# =========================================================
+# Circos overlap plots: shared/unique UP and DOWN DEGs
+# Cell type: oligodendrocyte / excitatory oligodendrocyte
+# =========================================================
+
+library(tidyverse)
+library(circlize)
+library(scales)
+library(ggplotify)
+library(ggpubr)
+
+# ------------------------------
+# Directories and parameters
+# ------------------------------
+main_output_dir <- "/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/results/DEGs_MAST_RNA_pct0.25"
+output_dir <- "/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/results/circos_DEG_overlap"
+
+dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+
+celltype <- "oligodendrocyte"
+
+logfc_cutoff <- 0.25
+padj_cutoff <- 0.05
+
+text_cex <- 7 / 12
+
+comparisons_to_read <- list(
+  AD  = c("AD_AT",   "CONTROL"),
+  S   = c("LBD_S",   "CONTROL"),
+  AS  = c("LBD_AS",  "CONTROL"),
+  ATS = c("LBD_ATS", "CONTROL")
+)
+
+pretty_names <- c(
+  AD  = "AD (AT)",
+  S   = "LBD (S)",
+  AS  = "LBD (AS)",
+  ATS = "LBD (ATS)"
+)
+
+group_cols <- c(
+  "AD (AT)"   = "#B4464B",
+  "LBD (S)"   = "gray",
+  "LBD (AS)"  = "#88778D",
+  "LBD (ATS)" = "gray10"
+)
+
+# ------------------------------
+# Helper: read DEG file
+# ------------------------------
+read_deg_file <- function(celltype, group1, group2, main_output_dir) {
+  
+  fname <- file.path(
+    main_output_dir,
+    celltype,
+    sprintf("DEG_%s_%s_vs_%s.tsv", celltype, group1, group2)
+  )
+  
+  if (!file.exists(fname)) {
+    stop("File not found: ", fname)
+  }
+  
+  df <- readr::read_tsv(fname, show_col_types = FALSE)
+  
+  required <- c("gene", "avg_log2FC", "p_val_adj")
+  if (!all(required %in% colnames(df))) {
+    stop("Missing required columns in: ", fname)
+  }
+  
+  df %>%
+    dplyr::select(gene, avg_log2FC, p_val_adj)
+}
+
+# ------------------------------
+# Make DEG gene lists
+# ------------------------------
+make_deg_lists <- function(direction = c("up", "down")) {
+  
+  direction <- match.arg(direction)
+  
+  deg_lists <- lapply(names(comparisons_to_read), function(group_label) {
+    
+    pair <- comparisons_to_read[[group_label]]
+    
+    df <- read_deg_file(
+      celltype = celltype,
+      group1 = pair[1],
+      group2 = pair[2],
+      main_output_dir = main_output_dir
+    ) %>%
+      filter(
+        !is.na(gene),
+        !is.na(avg_log2FC),
+        !is.na(p_val_adj),
+        p_val_adj <= padj_cutoff
+      )
+    
+    if (direction == "up") {
+      df <- df %>% filter(avg_log2FC >= logfc_cutoff)
+    }
+    
+    if (direction == "down") {
+      df <- df %>% filter(avg_log2FC <= -logfc_cutoff)
+    }
+    
+    df %>%
+      pull(gene) %>%
+      unique()
+  })
+  
+  names(deg_lists) <- pretty_names[names(comparisons_to_read)]
+  
+  deg_lists
+}
+
+# ------------------------------
+# Build pairwise overlap table
+# ------------------------------
+make_pairwise_links <- function(gene_lists) {
+  
+  group_names <- names(gene_lists)
+  links <- list()
+  
+  for (i in seq_along(group_names)) {
+    for (j in seq_along(group_names)) {
+      
+      if (i < j) {
+        
+        g1 <- group_names[i]
+        g2 <- group_names[j]
+        
+        shared_genes <- intersect(gene_lists[[g1]], gene_lists[[g2]])
+        
+        if (length(shared_genes) > 0) {
+          links[[paste(g1, g2, sep = "_")]] <- tibble(
+            from = g1,
+            to = g2,
+            value = length(shared_genes),
+            genes = paste(shared_genes, collapse = ";")
+          )
+        }
+      }
+    }
+  }
+  
+  bind_rows(links)
+}
+
+# ------------------------------
+# Build overlap matrix
+# ------------------------------
+make_overlap_matrix <- function(gene_lists) {
+  
+  overlap_mat <- matrix(
+    0,
+    nrow = length(gene_lists),
+    ncol = length(gene_lists),
+    dimnames = list(names(gene_lists), names(gene_lists))
+  )
+  
+  for (i in names(gene_lists)) {
+    for (j in names(gene_lists)) {
+      if (i != j) {
+        overlap_mat[i, j] <- length(intersect(gene_lists[[i]], gene_lists[[j]]))
+      }
+    }
+  }
+  
+  diag(overlap_mat) <- lengths(gene_lists)
+  
+  overlap_mat
+}
+
+# ------------------------------
+# Draw circos plot
+# ------------------------------
+draw_deg_circos <- function(overlap_mat, plot_title) {
+  
+  circos.clear()
+  
+  circos.par(
+    start.degree = 90,
+    gap.degree = 6,
+    track.margin = c(0.01, 0.01),
+    canvas.xlim = c(-1.35, 1.35),
+    canvas.ylim = c(-1.35, 1.35)
+  )
+  
+  chordDiagram(
+    x = overlap_mat,
+    grid.col = group_cols,
+    transparency = 0.35,
+    directional = 0,
+    annotationTrack = "grid",
+    preAllocateTracks = list(track.height = 0.12)
+  )
+  
+  circos.trackPlotRegion(
+    track.index = 1,
+    panel.fun = function(x, y) {
+      
+      sector_name <- get.cell.meta.data("sector.index")
+      xlim <- get.cell.meta.data("xlim")
+      ylim <- get.cell.meta.data("ylim")
+      
+      circos.text(
+        x = mean(xlim),
+        y = ylim[1] + 1.2,
+        labels = sector_name,
+        facing = "clockwise",
+        niceFacing = TRUE,
+        adj = c(0, 0.5),
+        cex = text_cex
+      )
+    },
+    bg.border = NA
+  )
+  
+  title(
+    main = plot_title,
+    cex.main = text_cex
+  )
+  
+  circos.clear()
+}
+
+# ------------------------------
+# Save circos plot directly
+# ------------------------------
+save_deg_circos <- function(overlap_mat, plot_title, prefix) {
+  
+  pdf_file <- file.path(output_dir, paste0(prefix, ".pdf"))
+  png_file <- file.path(output_dir, paste0(prefix, ".png"))
+  
+  pdf(pdf_file, width = 7, height = 7, useDingbats = FALSE)
+  draw_deg_circos(overlap_mat, plot_title)
+  dev.off()
+  
+  png(png_file, width = 2400, height = 2400, res = 300)
+  draw_deg_circos(overlap_mat, plot_title)
+  dev.off()
+}
+
+# ------------------------------
+# Make ggplot object for ggarrange
+# ------------------------------
+make_circos_ggplot <- function(overlap_mat, plot_title) {
+  
+  ggplotify::as.ggplot(function() {
+    draw_deg_circos(overlap_mat, plot_title)
+  })
+}
+
+# ------------------------------
+# Full wrapper for one direction
+# ------------------------------
+run_circos_for_direction <- function(direction = c("up", "down")) {
+  
+  direction <- match.arg(direction)
+  
+  deg_lists <- make_deg_lists(direction = direction)
+  
+  deg_long <- tibble(
+    group = names(deg_lists),
+    genes = deg_lists
+  ) %>%
+    tidyr::unnest_longer(genes, values_to = "gene")
+  
+  write_tsv(
+    deg_long,
+    file.path(output_dir, paste0(celltype, "_", direction, "regulated_DEG_lists_long.tsv"))
+  )
+  
+  links_df <- make_pairwise_links(deg_lists)
+  
+  write_tsv(
+    links_df,
+    file.path(output_dir, paste0(celltype, "_", direction, "regulated_pairwise_overlap_links.tsv"))
+  )
+  
+  overlap_mat <- make_overlap_matrix(deg_lists)
+  
+  write.csv(
+    overlap_mat,
+    file.path(output_dir, paste0(celltype, "_", direction, "regulated_overlap_matrix.csv"))
+  )
+  
+  plot_title <- paste0(celltype, " ", direction, "regulated DEG overlap")
+  
+  prefix <- paste0(celltype, "_", direction, "regulated_DEG_circos_overlap")
+  
+  save_deg_circos(
+    overlap_mat = overlap_mat,
+    plot_title = plot_title,
+    prefix = prefix
+  )
+  
+  p <- make_circos_ggplot(
+    overlap_mat = overlap_mat,
+    plot_title = plot_title
+  )
+  
+  return(list(
+    plot = p,
+    deg_lists = deg_lists,
+    links_df = links_df,
+    overlap_mat = overlap_mat
+  ))
+}
+
+# ------------------------------
+# Run UP and DOWN
+# ------------------------------
+up_results <- run_circos_for_direction("up")
+down_results <- run_circos_for_direction("down")
+
+p_circos_up <- up_results$plot
+p_circos_down <- down_results$plot
+
+# ------------------------------
+# Example: arrange as panels
+# ------------------------------
+p_circos_both <- ggarrange(
+  p_circos_down,
+  p_circos_up,
+  labels = c("A", "B"),
+  ncol = 2,
+  nrow = 1,
+  font.label = list(size = 7)
+)
+
+ggsave(
+  filename = file.path(output_dir, paste0(celltype, "_up_down_DEG_circos_overlap_combined.pdf")),
+  plot = p_circos_both,
+  width = 6.5,
+  height = 3,
+  units = "in"
+)
+
+ggsave(
+  filename = file.path(output_dir, paste0(celltype, "_up_down_DEG_circos_overlap_combined.png")),
+  plot = p_circos_both,
+  width = 10,
+  height = 5,
+  units = "in",
+  dpi = 300
+)
+
+message("Done. UP and DOWN circos plots saved to: ", output_dir)
+```
+
+
+```{r}
+comparisons_to_plot <- list(
+  c("AD_AT", "CONTROL"),
+  c("LBD_S", "CONTROL"),
+  c("LBD_AS", "CONTROL"),
+  c("LBD_ATS", "CONTROL")
+)
+cell_types <- order_cell_type
+```
+# Metascape
+### oligodendrocyte
+### UP
+```{r}
+getwd()
+# read in enrichment analysis results
+shared_up_enrich_results <-
+  read.csv("../results/metascape_multilist_MAST_DEGs/oligodendrocyte_Disease_vs_CONTROL_upregulated/Enrichment_heatmap/HeatmapSelectedGO.csv")
+shared_up_enrich_results$Description <-
+      gsub(
+       "Diseases of signal transduction by growth factor receptors and second messengers",
+        "Diseases of signal transduction",
+        shared_up_enrich_results$Description
+      )
+shared_up_enrich_results$Description <-
+      gsub(
+       "negative regulation of cellular component organization",
+        "neg reg of cellular component organization",
+        shared_up_enrich_results$Description
+      )
+
+
+shared_up_enrich_results$Description <-
+      gsub(
+       "enzyme−linked receptor protein signaling pathway",
+        "enzyme−linked receptor protein signaling",
+        shared_up_enrich_results$Description
+      )
+shared_up_enrich_results$Description <-
+      gsub(
+       "positive regulation of cellular component biogenesis",
+        "pos reg of cellular component biogenesis",
+        shared_up_enrich_results$Description
+      )
+
+shared_up_enrich_results$Description <-
+      gsub(
+       "Signaling by Rho GTPases, Miro GTPases and RHOBTB3",
+        "Signaling by Rho & Miro GTPases, RHOBTB3",
+        shared_up_enrich_results$Description
+      )
+
+
+shared_up_enrich_results$Description <- factor(shared_up_enrich_results$Description, levels = shared_up_enrich_results$Description)
+shared_up_enrich_results <- reshape2::melt(shared_up_enrich_results)
+shared_up_enrich_results$variable <-
+      gsub(
+       "X_LogP_AD_AT_vs_CONTROL",
+        "AD (AT)",
+        shared_up_enrich_results$variable
+      )
+shared_up_enrich_results$variable <-
+      gsub(
+       "X_LogP_LBD_S_vs_CONTROL",
+        "LBD (S)",
+        shared_up_enrich_results$variable
+      )
+shared_up_enrich_results$variable <-
+      gsub(
+       "X_LogP_LBD_AS_vs_CONTROL",
+        "LBD (AS)",
+        shared_up_enrich_results$variable
+      )
+shared_up_enrich_results$variable <-
+      gsub(
+       "X_LogP_LBD_ATS_vs_CONTROL",
+        "LBD (ATS)",
+        shared_up_enrich_results$variable
+      )
+shared_up_enrich_results$variable <- factor(shared_up_enrich_results$variable, levels = c("AD (AT)", "LBD (S)", "LBD (AS)", "LBD (ATS)"))
+# plot - up
+shared_up_enric_heatmap <- 
+  ggplot(shared_up_enrich_results, aes(variable, fct_rev(Description), fill= value)) + 
+  geom_tile() +
+  scale_y_discrete(expand = c(0, 0)) +
+  labs(x = "", y = "") +
+  guides(fill = guide_legend(
+    size = 1,
+    title = expression(log[10] ~ 
+"(" ~ italic("p") ~ "")
+  )) +
+  scale_fill_gradientn(
+    colours = c("#800026FF","#FD8D3CFF", "#FFFFCCFF"),
+    values = scales::rescale(c(-35, -20, -10, -1)), 
+    breaks = c(-35, -20, -10, -1), 
+    guide = "legend",
+    limits = c(-35,-1)
+  ) +  theme_bw() +
+    theme(strip.text = element_text(size = 7), 
+          axis.text.y = element_text(size = 7),
+          axis.text.x = element_text(size = 7, angle = 45, hjust = 1),
+          axis.title.x = element_text(size = 7), 
+          legend.text = element_text(size = 7),
+          legend.title = element_text(size = 7),
+          legend.margin=margin(0,0.025,0,0),
+          legend.box.margin=margin(-10,0.5,-10,-8.75), 
+          plot.margin = margin(0.5, 0.025, 0.01, -0.2, "cm"), #t,r,b,l
+          plot.title = element_text(size = 8, margin = margin(.1,.1,.1,0), hjust = 2.25)) 
+# + ggtitle("Up-regulated enrichment summaries")
+
+addSmallLegend <- function(shared_up_enric_heatmap, pointSize = 1.75, textSize = 5, spaceLegend = .5) {
+    shared_up_enric_heatmap +
+        guides(shape = guide_legend(override.aes = list(size = pointSize)),
+               color = guide_legend(override.aes = list(size = pointSize))) +
+        theme(legend.title = element_text(size = textSize), 
+              legend.position = "right",
+              legend.text  = element_text(size = textSize),
+              legend.key.size = unit(spaceLegend, "lines"))
+}
+# Apply on original plot
+shared_up_enric_heatmap <- addSmallLegend(shared_up_enric_heatmap)
+shared_up_enric_heatmap
+```
+
+### Down
+```{r down_heat}
+#--------
+# down
+shared_down_enrich_results <- read.csv("../results/metascape_multilist_MAST_DEGs/oligodendrocyte_Disease_vs_CONTROL_downregulated/Enrichment_heatmap/HeatmapSelectedGO.csv")
+shared_down_enrich_results$Description <-
+      gsub(
+       "regulation of small GTPase mediated signal transduction",
+        "reg small GTPase mediated signal transduction",
+        shared_down_enrich_results$Description
+      )
+
+shared_down_enrich_results$Description <-
+      gsub(
+       "negative regulation of cellular component organization",
+        "neg reg of cellular component organization",
+        shared_down_enrich_results$Description
+      )
+
+shared_down_enrich_results$Description <-
+      gsub(
+       "positive regulation of cellular component biogenesis",
+        "pos reg of cellular component biogenesis",
+        shared_down_enrich_results$Description
+      )
+
+shared_down_enrich_results$Description <-
+      gsub(
+       "Diseases of signal transduction by growth factor receptors and second messengers",
+        "Diseases of signal transduction",
+        shared_down_enrich_results$Description
+      )
+
+
+shared_down_enrich_results$Description <- factor(shared_down_enrich_results$Description, levels = shared_down_enrich_results$Description)
+shared_down_enrich_results <- reshape2::melt(shared_down_enrich_results)
+shared_down_enrich_results$variable <-
+      gsub(
+       "X_LogP_AD_AT_vs_CONTROL",
+        "AD (AT)",
+        shared_down_enrich_results$variable
+      )
+shared_down_enrich_results$variable <-
+      gsub(
+       "X_LogP_LBD_S_vs_CONTROL",
+        "LBD (S)",
+        shared_down_enrich_results$variable
+      )
+shared_down_enrich_results$variable <-
+      gsub(
+       "X_LogP_LBD_AS_vs_CONTROL",
+        "LBD (AS)",
+        shared_down_enrich_results$variable
+      )
+shared_down_enrich_results$variable <-
+      gsub(
+       "X_LogP_LBD_ATS_vs_CONTROL",
+        "LBD (ATS)",
+        shared_down_enrich_results$variable
+      )
+
+shared_down_enrich_results$variable <- factor(shared_down_enrich_results$variable, levels = c("AD (AT)", "LBD (S)", "LBD (AS)", "LBD (ATS)"))
+# plot - down
+shared_down_enric_heatmap <- 
+  ggplot(shared_down_enrich_results, aes(variable, fct_rev(Description), fill= value)) + 
+  geom_tile() +
+  scale_y_discrete(expand = c(0, 0)) +
+  labs(x = "", y = "") +
+  guides(fill = guide_legend(
+    size = 1,
+    title = expression(log[10] ~ 
+"(" ~ italic("p") ~ ")")
+  )) +
+  scale_fill_gradientn(
+    colours = c("#0e406bff","#5CACEE", "#CAE1FF"),
+    values = scales::rescale(c(-35, -20, -10, -1)), 
+    breaks = c(-35, -20, -10, -1), 
+    guide = "legend",
+    limits = c(-35,-1)
+    ) + theme_bw() +
+    theme(strip.text = element_text(size = 7), 
+          axis.text.y = element_text(size = 7),
+          axis.text.x = element_text(size = 7, angle = 45, hjust = 1),
+          axis.title.x = element_text(size = 7), 
+          legend.text = element_text(size = 7),
+          legend.title = element_text(size = 7),
+          legend.margin=margin(0,0.5,0,0),
+          legend.box.margin=margin(-10,0,-10,-8.5), 
+          plot.margin = margin(0.5, 0.05, 0.01, 0.0, "cm"), #t,r,b,l
+          plot.title = element_text(size = 8, margin = margin(.1,.1,.1,0), hjust = 1.95))
+# + ggtitle("Down-regulated enrichment summaries")
+
+addSmallLegend <- function(shared_down_enric_heatmap, pointSize = 1.75, textSize = 5, spaceLegend = .5) {
+    shared_down_enric_heatmap +
+        guides(shape = guide_legend(override.aes = list(size = pointSize)),
+               color = guide_legend(override.aes = list(size = pointSize))) +
+        theme(legend.title = element_text(size = textSize), 
+              legend.position = "right",
+              legend.text  = element_text(size = textSize),
+              legend.key.size = unit(spaceLegend, "lines"))
+}
+# Apply on original plot
+shared_down_enric_heatmap <- addSmallLegend(shared_down_enric_heatmap)
+shared_down_enric_heatmap
+```
+
+# Save
+```{r}
+Figure_oligodendrocyte_GO <- ggarrange(
+  shared_down_enric_heatmap,
+  shared_up_enric_heatmap,
+  ncol = 2,
+  labels = c("A", "B"), 
+  font.label = list(size = 10)
+)
+Figure_oligodendrocyte_GO
+path <- paste0("/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/manuscript_figures/Figure_oligodendrocyte_GO")
+saveToPDF(paste0(path, ".pdf"), width = 6.5, height = 3)
+```
+
+## Circos plot
+```{r}
+# =========================================================
+# Circos overlap plots: shared/unique UP and DOWN DEGs
+# Cell type: opc / excitatory opc
+# =========================================================
+
+library(tidyverse)
+library(circlize)
+library(scales)
+library(ggplotify)
+library(ggpubr)
+
+# ------------------------------
+# Directories and parameters
+# ------------------------------
+main_output_dir <- "/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/results/DEGs_MAST_RNA_pct0.25"
+output_dir <- "/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/results/circos_DEG_overlap"
+
+dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+
+celltype <- "opc"
+
+logfc_cutoff <- 0.25
+padj_cutoff <- 0.05
+
+text_cex <- 7 / 12
+
+comparisons_to_read <- list(
+  AD  = c("AD_AT",   "CONTROL"),
+  S   = c("LBD_S",   "CONTROL"),
+  AS  = c("LBD_AS",  "CONTROL"),
+  ATS = c("LBD_ATS", "CONTROL")
+)
+
+pretty_names <- c(
+  AD  = "AD (AT)",
+  S   = "LBD (S)",
+  AS  = "LBD (AS)",
+  ATS = "LBD (ATS)"
+)
+
+group_cols <- c(
+  "AD (AT)"   = "#B4464B",
+  "LBD (S)"   = "gray",
+  "LBD (AS)"  = "#88778D",
+  "LBD (ATS)" = "gray10"
+)
+
+# ------------------------------
+# Helper: read DEG file
+# ------------------------------
+read_deg_file <- function(celltype, group1, group2, main_output_dir) {
+  
+  fname <- file.path(
+    main_output_dir,
+    celltype,
+    sprintf("DEG_%s_%s_vs_%s.tsv", celltype, group1, group2)
+  )
+  
+  if (!file.exists(fname)) {
+    stop("File not found: ", fname)
+  }
+  
+  df <- readr::read_tsv(fname, show_col_types = FALSE)
+  
+  required <- c("gene", "avg_log2FC", "p_val_adj")
+  if (!all(required %in% colnames(df))) {
+    stop("Missing required columns in: ", fname)
+  }
+  
+  df %>%
+    dplyr::select(gene, avg_log2FC, p_val_adj)
+}
+
+# ------------------------------
+# Make DEG gene lists
+# ------------------------------
+make_deg_lists <- function(direction = c("up", "down")) {
+  
+  direction <- match.arg(direction)
+  
+  deg_lists <- lapply(names(comparisons_to_read), function(group_label) {
+    
+    pair <- comparisons_to_read[[group_label]]
+    
+    df <- read_deg_file(
+      celltype = celltype,
+      group1 = pair[1],
+      group2 = pair[2],
+      main_output_dir = main_output_dir
+    ) %>%
+      filter(
+        !is.na(gene),
+        !is.na(avg_log2FC),
+        !is.na(p_val_adj),
+        p_val_adj <= padj_cutoff
+      )
+    
+    if (direction == "up") {
+      df <- df %>% filter(avg_log2FC >= logfc_cutoff)
+    }
+    
+    if (direction == "down") {
+      df <- df %>% filter(avg_log2FC <= -logfc_cutoff)
+    }
+    
+    df %>%
+      pull(gene) %>%
+      unique()
+  })
+  
+  names(deg_lists) <- pretty_names[names(comparisons_to_read)]
+  
+  deg_lists
+}
+
+# ------------------------------
+# Build pairwise overlap table
+# ------------------------------
+make_pairwise_links <- function(gene_lists) {
+  
+  group_names <- names(gene_lists)
+  links <- list()
+  
+  for (i in seq_along(group_names)) {
+    for (j in seq_along(group_names)) {
+      
+      if (i < j) {
+        
+        g1 <- group_names[i]
+        g2 <- group_names[j]
+        
+        shared_genes <- intersect(gene_lists[[g1]], gene_lists[[g2]])
+        
+        if (length(shared_genes) > 0) {
+          links[[paste(g1, g2, sep = "_")]] <- tibble(
+            from = g1,
+            to = g2,
+            value = length(shared_genes),
+            genes = paste(shared_genes, collapse = ";")
+          )
+        }
+      }
+    }
+  }
+  
+  bind_rows(links)
+}
+
+# ------------------------------
+# Build overlap matrix
+# ------------------------------
+make_overlap_matrix <- function(gene_lists) {
+  
+  overlap_mat <- matrix(
+    0,
+    nrow = length(gene_lists),
+    ncol = length(gene_lists),
+    dimnames = list(names(gene_lists), names(gene_lists))
+  )
+  
+  for (i in names(gene_lists)) {
+    for (j in names(gene_lists)) {
+      if (i != j) {
+        overlap_mat[i, j] <- length(intersect(gene_lists[[i]], gene_lists[[j]]))
+      }
+    }
+  }
+  
+  diag(overlap_mat) <- lengths(gene_lists)
+  
+  overlap_mat
+}
+
+# ------------------------------
+# Draw circos plot
+# ------------------------------
+draw_deg_circos <- function(overlap_mat, plot_title) {
+  
+  circos.clear()
+  
+  circos.par(
+    start.degree = 90,
+    gap.degree = 6,
+    track.margin = c(0.01, 0.01),
+    canvas.xlim = c(-1.35, 1.35),
+    canvas.ylim = c(-1.35, 1.35)
+  )
+  
+  chordDiagram(
+    x = overlap_mat,
+    grid.col = group_cols,
+    transparency = 0.35,
+    directional = 0,
+    annotationTrack = "grid",
+    preAllocateTracks = list(track.height = 0.12)
+  )
+  
+  circos.trackPlotRegion(
+    track.index = 1,
+    panel.fun = function(x, y) {
+      
+      sector_name <- get.cell.meta.data("sector.index")
+      xlim <- get.cell.meta.data("xlim")
+      ylim <- get.cell.meta.data("ylim")
+      
+      circos.text(
+        x = mean(xlim),
+        y = ylim[1] + 1.2,
+        labels = sector_name,
+        facing = "clockwise",
+        niceFacing = TRUE,
+        adj = c(0, 0.5),
+        cex = text_cex
+      )
+    },
+    bg.border = NA
+  )
+  
+  title(
+    main = plot_title,
+    cex.main = text_cex
+  )
+  
+  circos.clear()
+}
+
+# ------------------------------
+# Save circos plot directly
+# ------------------------------
+save_deg_circos <- function(overlap_mat, plot_title, prefix) {
+  
+  pdf_file <- file.path(output_dir, paste0(prefix, ".pdf"))
+  png_file <- file.path(output_dir, paste0(prefix, ".png"))
+  
+  pdf(pdf_file, width = 7, height = 7, useDingbats = FALSE)
+  draw_deg_circos(overlap_mat, plot_title)
+  dev.off()
+  
+  png(png_file, width = 2400, height = 2400, res = 300)
+  draw_deg_circos(overlap_mat, plot_title)
+  dev.off()
+}
+
+# ------------------------------
+# Make ggplot object for ggarrange
+# ------------------------------
+make_circos_ggplot <- function(overlap_mat, plot_title) {
+  
+  ggplotify::as.ggplot(function() {
+    draw_deg_circos(overlap_mat, plot_title)
+  })
+}
+
+# ------------------------------
+# Full wrapper for one direction
+# ------------------------------
+run_circos_for_direction <- function(direction = c("up", "down")) {
+  
+  direction <- match.arg(direction)
+  
+  deg_lists <- make_deg_lists(direction = direction)
+  
+  deg_long <- tibble(
+    group = names(deg_lists),
+    genes = deg_lists
+  ) %>%
+    tidyr::unnest_longer(genes, values_to = "gene")
+  
+  write_tsv(
+    deg_long,
+    file.path(output_dir, paste0(celltype, "_", direction, "regulated_DEG_lists_long.tsv"))
+  )
+  
+  links_df <- make_pairwise_links(deg_lists)
+  
+  write_tsv(
+    links_df,
+    file.path(output_dir, paste0(celltype, "_", direction, "regulated_pairwise_overlap_links.tsv"))
+  )
+  
+  overlap_mat <- make_overlap_matrix(deg_lists)
+  
+  write.csv(
+    overlap_mat,
+    file.path(output_dir, paste0(celltype, "_", direction, "regulated_overlap_matrix.csv"))
+  )
+  
+  plot_title <- paste0(celltype, " ", direction, "regulated DEG overlap")
+  
+  prefix <- paste0(celltype, "_", direction, "regulated_DEG_circos_overlap")
+  
+  save_deg_circos(
+    overlap_mat = overlap_mat,
+    plot_title = plot_title,
+    prefix = prefix
+  )
+  
+  p <- make_circos_ggplot(
+    overlap_mat = overlap_mat,
+    plot_title = plot_title
+  )
+  
+  return(list(
+    plot = p,
+    deg_lists = deg_lists,
+    links_df = links_df,
+    overlap_mat = overlap_mat
+  ))
+}
+
+# ------------------------------
+# Run UP and DOWN
+# ------------------------------
+up_results <- run_circos_for_direction("up")
+down_results <- run_circos_for_direction("down")
+
+p_circos_up <- up_results$plot
+p_circos_down <- down_results$plot
+
+# ------------------------------
+# Example: arrange as panels
+# ------------------------------
+p_circos_both <- ggarrange(
+  p_circos_down,
+  p_circos_up,
+  labels = c("A", "B"),
+  ncol = 2,
+  nrow = 1,
+  font.label = list(size = 7)
+)
+
+ggsave(
+  filename = file.path(output_dir, paste0(celltype, "_up_down_DEG_circos_overlap_combined.pdf")),
+  plot = p_circos_both,
+  width = 6.5,
+  height = 3,
+  units = "in"
+)
+
+ggsave(
+  filename = file.path(output_dir, paste0(celltype, "_up_down_DEG_circos_overlap_combined.png")),
+  plot = p_circos_both,
+  width = 10,
+  height = 5,
+  units = "in",
+  dpi = 300
+)
+
+message("Done. UP and DOWN circos plots saved to: ", output_dir)
+```
+
+# Metascape
+### opc
+### UP
+```{r}
+getwd()
+# read in enrichment analysis results
+shared_up_enrich_results <-
+  read.csv("../results/metascape_multilist_MAST_DEGs/opc_Disease_vs_CONTROL_upregulated/Enrichment_heatmap/HeatmapSelectedGO.csv")
+shared_up_enrich_results$Description <-
+      gsub(
+       "Diseases of signal transduction by growth factor receptors and second messengers",
+        "Diseases of signal transduction",
+        shared_up_enrich_results$Description
+      )
+shared_up_enrich_results$Description <-
+      gsub(
+       "negative regulation of cellular component organization",
+        "neg reg of cellular component organization",
+        shared_up_enrich_results$Description
+      )
+
+shared_up_enrich_results$Description <-
+      gsub(
+       "regulation of small GTPase mediated signal transduction",
+        "reg small GTPase mediated signal transduction",
+        shared_up_enrich_results$Description
+      )
+
+shared_up_enrich_results$Description <-
+      gsub(
+       "positive regulation of cellular component biogenesis",
+        "pos reg of cellular component biogenesis",
+        shared_up_enrich_results$Description
+      )
+
+shared_up_enrich_results$Description <-
+      gsub(
+       "Signaling by Rho GTPases, Miro GTPases and RHOBTB3",
+        "Signaling by Rho & Miro GTPases, RHOBTB3",
+        shared_up_enrich_results$Description
+      )
+
+
+shared_up_enrich_results$Description <- factor(shared_up_enrich_results$Description, levels = shared_up_enrich_results$Description)
+shared_up_enrich_results <- reshape2::melt(shared_up_enrich_results)
+shared_up_enrich_results$variable <-
+      gsub(
+       "X_LogP_AD_AT_vs_CONTROL",
+        "AD (AT)",
+        shared_up_enrich_results$variable
+      )
+shared_up_enrich_results$variable <-
+      gsub(
+       "X_LogP_LBD_S_vs_CONTROL",
+        "LBD (S)",
+        shared_up_enrich_results$variable
+      )
+shared_up_enrich_results$variable <-
+      gsub(
+       "X_LogP_LBD_AS_vs_CONTROL",
+        "LBD (AS)",
+        shared_up_enrich_results$variable
+      )
+shared_up_enrich_results$variable <-
+      gsub(
+       "X_LogP_LBD_ATS_vs_CONTROL",
+        "LBD (ATS)",
+        shared_up_enrich_results$variable
+      )
+shared_up_enrich_results$variable <- factor(shared_up_enrich_results$variable, levels = c("AD (AT)", "LBD (S)", "LBD (AS)", "LBD (ATS)"))
+# plot - up
+shared_up_enric_heatmap <- 
+  ggplot(shared_up_enrich_results, aes(variable, fct_rev(Description), fill= value)) + 
+  geom_tile() +
+  scale_y_discrete(expand = c(0, 0)) +
+  labs(x = "", y = "") +
+  guides(fill = guide_legend(
+    size = 1,
+    title = expression(log[10] ~ 
+"(" ~ italic("p") ~ "")
+  )) +
+  scale_fill_gradientn(
+    colours = c("#800026FF","#FD8D3CFF", "#FFFFCCFF"),
+    values = scales::rescale(c(-35, -20, -10, -1)), 
+    breaks = c(-35, -20, -10, -1), 
+    guide = "legend",
+    limits = c(-35,-1)
+  ) +  theme_bw() +
+    theme(strip.text = element_text(size = 7), 
+          axis.text.y = element_text(size = 7),
+          axis.text.x = element_text(size = 7, angle = 45, hjust = 1),
+          axis.title.x = element_text(size = 7), 
+          legend.text = element_text(size = 7),
+          legend.title = element_text(size = 7),
+          legend.margin=margin(0,0.025,0,0),
+          legend.box.margin=margin(-10,0.5,-10,-8.75), 
+          plot.margin = margin(0.5, 0.025, 0.01, -0.2, "cm"), #t,r,b,l
+          plot.title = element_text(size = 8, margin = margin(.1,.1,.1,0), hjust = 2.25)) 
+# + ggtitle("Up-regulated enrichment summaries")
+
+addSmallLegend <- function(shared_up_enric_heatmap, pointSize = 1.75, textSize = 5, spaceLegend = .5) {
+    shared_up_enric_heatmap +
+        guides(shape = guide_legend(override.aes = list(size = pointSize)),
+               color = guide_legend(override.aes = list(size = pointSize))) +
+        theme(legend.title = element_text(size = textSize), 
+              legend.position = "right",
+              legend.text  = element_text(size = textSize),
+              legend.key.size = unit(spaceLegend, "lines"))
+}
+# Apply on original plot
+shared_up_enric_heatmap <- addSmallLegend(shared_up_enric_heatmap)
+shared_up_enric_heatmap
+```
+
+### Down
+```{r down_heat}
+#--------
+# down
+shared_down_enrich_results <- read.csv("../results/metascape_multilist_MAST_DEGs/opc_Disease_vs_CONTROL_downregulated/Enrichment_heatmap/HeatmapSelectedGO.csv")
+shared_down_enrich_results$Description <-
+      gsub(
+       "regulation of postsynaptic membrane neurotransmitter receptor levels",
+        "postsynaptic membrane neurotransmitter receptor",
+        shared_down_enrich_results$Description
+      )
+
+shared_down_enrich_results$Description <-
+      gsub(
+       "cell surface receptor protein tyrosine kinase signaling pathway",
+        "cell surface receptor tyrosine kinase signaling",
+        shared_down_enrich_results$Description
+      )
+
+shared_down_enrich_results$Description <-
+      gsub(
+       "regulation of small GTPase mediated signal transduction",
+        "reg small GTPase mediated signal transduction",
+        shared_down_enrich_results$Description
+      )
+
+shared_down_enrich_results$Description <-
+      gsub(
+       "negative regulation of cellular component organization",
+        "neg reg of cellular component organization",
+        shared_down_enrich_results$Description
+      )
+
+shared_down_enrich_results$Description <-
+      gsub(
+       "positive regulation of cellular component biogenesis",
+        "pos reg of cellular component biogenesis",
+        shared_down_enrich_results$Description
+      )
+
+shared_down_enrich_results$Description <-
+      gsub(
+       "Diseases of signal transduction by growth factor receptors and second messengers",
+        "Diseases of signal transduction",
+        shared_down_enrich_results$Description
+      )
+
+
+shared_down_enrich_results$Description <- factor(shared_down_enrich_results$Description, levels = shared_down_enrich_results$Description)
+shared_down_enrich_results <- reshape2::melt(shared_down_enrich_results)
+shared_down_enrich_results$variable <-
+      gsub(
+       "X_LogP_AD_AT_vs_CONTROL",
+        "AD (AT)",
+        shared_down_enrich_results$variable
+      )
+shared_down_enrich_results$variable <-
+      gsub(
+       "X_LogP_LBD_S_vs_CONTROL",
+        "LBD (S)",
+        shared_down_enrich_results$variable
+      )
+shared_down_enrich_results$variable <-
+      gsub(
+       "X_LogP_LBD_AS_vs_CONTROL",
+        "LBD (AS)",
+        shared_down_enrich_results$variable
+      )
+shared_down_enrich_results$variable <-
+      gsub(
+       "X_LogP_LBD_ATS_vs_CONTROL",
+        "LBD (ATS)",
+        shared_down_enrich_results$variable
+      )
+
+shared_down_enrich_results$variable <- factor(shared_down_enrich_results$variable, levels = c("AD (AT)", "LBD (S)", "LBD (AS)", "LBD (ATS)"))
+# plot - down
+shared_down_enric_heatmap <- 
+  ggplot(shared_down_enrich_results, aes(variable, fct_rev(Description), fill= value)) + 
+  geom_tile() +
+  scale_y_discrete(expand = c(0, 0)) +
+  labs(x = "", y = "") +
+  guides(fill = guide_legend(
+    size = 1,
+    title = expression(log[10] ~ 
+"(" ~ italic("p") ~ ")")
+  )) +
+  scale_fill_gradientn(
+    colours = c("#0e406bff","#5CACEE", "#CAE1FF"),
+    values = scales::rescale(c(-35, -20, -10, -1)), 
+    breaks = c(-35, -20, -10, -1), 
+    guide = "legend",
+    limits = c(-35,-1)
+    ) + theme_bw() +
+    theme(strip.text = element_text(size = 7), 
+          axis.text.y = element_text(size = 7),
+          axis.text.x = element_text(size = 7, angle = 45, hjust = 1),
+          axis.title.x = element_text(size = 7), 
+          legend.text = element_text(size = 7),
+          legend.title = element_text(size = 7),
+          legend.margin=margin(0,0.5,0,0),
+          legend.box.margin=margin(-10,0,-10,-8.5), 
+          plot.margin = margin(0.5, 0.05, 0.01, 0.0, "cm"), #t,r,b,l
+          plot.title = element_text(size = 8, margin = margin(.1,.1,.1,0), hjust = 1.95))
+# + ggtitle("Down-regulated enrichment summaries")
+
+addSmallLegend <- function(shared_down_enric_heatmap, pointSize = 1.75, textSize = 5, spaceLegend = .5) {
+    shared_down_enric_heatmap +
+        guides(shape = guide_legend(override.aes = list(size = pointSize)),
+               color = guide_legend(override.aes = list(size = pointSize))) +
+        theme(legend.title = element_text(size = textSize), 
+              legend.position = "right",
+              legend.text  = element_text(size = textSize),
+              legend.key.size = unit(spaceLegend, "lines"))
+}
+# Apply on original plot
+shared_down_enric_heatmap <- addSmallLegend(shared_down_enric_heatmap)
+shared_down_enric_heatmap
+```
+
+# Save
+```{r}
+Figure_opc_GO <- ggarrange(
+  shared_down_enric_heatmap,
+  shared_up_enric_heatmap,
+  ncol = 2,
+  labels = c("A", "B"), 
+  font.label = list(size = 10)
+)
+Figure_opc_GO
+path <- paste0("/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/manuscript_figures/Figure_opc_GO")
+saveToPDF(paste0(path, ".pdf"), width = 6.5, height = 3)
+```
+
+```{r}
+Figure_opc_GO <- ggarrange(
+  shared_down_enric_heatmap,
+  shared_up_enric_heatmap,
+  ncol = 2,
+  labels = c("C", "D"), 
+  font.label = list(size = 10)
+)
+
+Figure_oligo_opc <- ggarrange(
+  Figure_oligodendrocyte_GO,
+  Figure_opc_GO,
+  nrow = 2
+)
+Figure_oligo_opc
+path <- paste0("/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/manuscript_figures/Figure_oligodendrocyte_opc_GO")
+saveToPDF(paste0(path, ".pdf"), width = 6.5, height = 6)
+```

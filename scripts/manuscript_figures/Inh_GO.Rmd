@@ -1,0 +1,868 @@
+---
+title: "inh GO LBD types vs AD"
+output: html_document
+date: "2025-12-02"
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = "/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/scripts/")
+setwd("/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/scripts/")
+```
+
+# Libraris, paths, colors
+```{r echo=FALSE, message=FALSE}
+source(here::here("/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/scripts/", "file_paths_and_colours.R"))
+color.panel <- dittoColors()
+```
+
+## paths and colors
+```{r}
+# =========================================================
+# Circos overlap plots: shared/unique UP and DOWN DEGs
+# Cell type: neuron / Inhitatory neuron
+# =========================================================
+
+library(tidyverse)
+library(circlize)
+library(scales)
+library(ggplotify)
+library(ggpubr)
+
+# ------------------------------
+# Directories and parameters
+# ------------------------------
+main_output_dir <- "/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/results/DEGs_MAST_RNA_pct0.25"
+output_dir <- "/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/results/circos_DEG_overlap"
+
+dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+
+celltype <- "interneuron"
+
+logfc_cutoff <- 0.25
+padj_cutoff <- 0.05
+
+comparisons_to_read <- list(
+  AD  = c("AD_AT",   "CONTROL"),
+  S   = c("LBD_S",   "CONTROL"),
+  AS  = c("LBD_AS",  "CONTROL"),
+  ATS = c("LBD_ATS", "CONTROL")
+)
+
+pretty_names <- c(
+  AD  = "AD (AT)",
+  S   = "LBD (S)",
+  AS  = "LBD (AS)",
+  ATS = "LBD (ATS)"
+)
+
+group_cols <- c(
+  "AD (AT)"   = "#B4464B",
+  "LBD (S)"   = "gray",
+  "LBD (AS)"  = "#88778D",
+  "LBD (ATS)" = "gray10"
+)
+```
+
+
+```{r}
+comparisons_to_plot <- list(
+  c("AD_AT", "CONTROL"),
+  c("LBD_S", "CONTROL"),
+  c("LBD_AS", "CONTROL"),
+  c("LBD_ATS", "CONTROL")
+)
+```
+# UpSet
+```{r}
+# =========================================================
+# Figure: Inh. neuron LBD types vs AD
+# Panel A: bidirectional DEG counts
+# Panel B: Downregulated DEG UpSet
+# Panel C: Upregulated DEG UpSet
+# Panel D/E: Metascape enrichment heatmaps
+# =========================================================
+
+main_output_dir <- "/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/results/DEGs_MAST_RNA_pct0.25"
+output_dir <- "/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/results/DEG_bidirectional_interneuron_LBDtypes_vs_AD"
+dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+
+celltype_raw <- "interneuron"
+celltype_plot <- "inh. neuron"
+
+up_logfc_cutoff <- 0.25
+down_logfc_cutoff <- -0.25
+padj_cutoff <- 0.05
+
+down_col <- "darkolivegreen4"
+up_col <- "darkgoldenrod1"
+
+comparisons_to_plot <- list(
+  S   = c("LBD_S",   "AD_AT"),
+  AS  = c("LBD_AS",  "AD_AT"),
+  ATS = c("LBD_ATS", "AD_AT")
+)
+
+comparison_order <- c(
+  "LBD_S_vs_AD_AT",
+  "LBD_AS_vs_AD_AT",
+  "LBD_ATS_vs_AD_AT"
+)
+
+comparison_labels <- c(
+  "LBD_S_vs_AD_AT"   = "LBD (S)",
+  "LBD_AS_vs_AD_AT"  = "LBD (AS)",
+  "LBD_ATS_vs_AD_AT" = "LBD (ATS)"
+)
+
+short_set_names <- c("LBD_S", "LBD_AS", "LBD_ATS")
+
+safe_read_deg <- safely(function(path) {
+  ext <- tools::file_ext(path)
+  if (ext == "csv") {
+    readr::read_csv(path, show_col_types = FALSE)
+  } else {
+    readr::read_tsv(path, show_col_types = FALSE)
+  }
+}, otherwise = NULL)
+
+addSmallLegend <- function(myPlot, pointSize = 1, textSize = 7, spaceLegend = 0.5) {
+  myPlot +
+    guides(fill = guide_legend(override.aes = list(size = pointSize))) +
+    theme(
+      legend.title = element_text(size = textSize),
+      legend.text  = element_text(size = textSize),
+      legend.key.size = unit(spaceLegend, "lines"),
+      legend.margin = margin(t = 0, r = 0, b = 0, l = -0.25, unit = "cm")
+    )
+}
+
+fromList_safe <- function(input) {
+  elements <- unique(unlist(input))
+  
+  if (length(elements) == 0) {
+    out <- as.data.frame(matrix(nrow = 0, ncol = length(input)))
+    colnames(out) <- names(input)
+    return(out)
+  }
+  
+  data <- unlist(lapply(input, function(x) {
+    as.vector(match(elements, x))
+  }))
+  
+  data[is.na(data)] <- as.integer(0)
+  data[data != 0] <- as.integer(1)
+  
+  data <- data.frame(matrix(data, ncol = length(input), byrow = FALSE))
+  data <- data[which(rowSums(data) != 0), , drop = FALSE]
+  
+  colnames(data) <- names(input)
+  rownames(data) <- elements
+  
+  return(data)
+}
+
+read_deg_one <- function(group1, group2) {
+  comparison <- paste0(group1, "_vs_", group2)
+  
+  fname <- file.path(
+    main_output_dir,
+    celltype_raw,
+    paste0("DEG_", celltype_raw, "_", comparison, ".tsv")
+  )
+  
+  if (!file.exists(fname)) {
+    stop("File not found: ", fname)
+  }
+  
+  df <- safe_read_deg(fname)$result
+  
+  if (is.null(df)) {
+    stop("Could not read file: ", fname)
+  }
+  
+  df <- df %>%
+    rename_with(~ tolower(.x))
+  
+  required_cols <- c("gene", "avg_log2fc", "p_val_adj")
+  if (!all(required_cols %in% colnames(df))) {
+    stop("Missing required columns in: ", fname)
+  }
+  
+  df %>%
+    dplyr::select(gene, avg_log2fc, p_val_adj) %>%
+    mutate(comparison = comparison)
+}
+
+deg_all <- map_dfr(names(comparisons_to_plot), function(label) {
+  pair <- comparisons_to_plot[[label]]
+  read_deg_one(pair[1], pair[2]) %>%
+    mutate(disease_group = label)
+})
+generate_upset_plot <- function(data, reg_status, dot_color) {
+  
+  if (nrow(data) == 0) {
+    return(
+      ggplot() +
+        geom_text(
+          aes(x = 0.5, y = 0.5, label = paste0(celltype_plot, " ", reg_status, ": no DEGs")),
+          size = 3
+        ) +
+        theme_void()
+    )
+  }
+  
+  upset_queries <- lapply(short_set_names, function(set_name) {
+    upset_query(set = set_name, fill = dot_color)
+  })
+  
+  sets_list <- list(
+    short_set_names[1],
+    short_set_names[2],
+    short_set_names[3],
+    c(short_set_names[1], short_set_names[2], short_set_names[3]),
+    c(short_set_names[2], short_set_names[3]),
+    c(short_set_names[1], short_set_names[3]),
+    c(short_set_names[1], short_set_names[2])
+  )
+  
+  upset(
+    data,
+    short_set_names,
+    set_sizes = FALSE,
+    queries = upset_queries,
+    intersections = sets_list,
+    base_annotations = list(
+      "Intersection size" = (
+        intersection_size(
+          size = 2,
+          text = list(size = 2.5),
+          text_mapping = aes(),
+          bar_number_threshold = 3,
+          width = 0.3,
+          mapping = aes(fill = "bars_color")
+        ) +
+          scale_fill_manual(values = c("bars_color" = dot_color), guide = "none") +
+          scale_y_continuous(expand = expansion(mult = c(0, 0.5))) +
+          theme(
+            axis.text.y = element_text(size = 7),
+            axis.title.y = element_blank(),
+            panel.grid.major = element_blank(),
+            panel.grid.minor = element_blank(),
+            plot.margin = margin(0, 0, 0, 0.1, "cm"),
+            axis.line = element_line(colour = "black")
+          )
+      )
+    ),
+    matrix = intersection_matrix(
+      geom = geom_point(
+        shape = "circle filled",
+        size = 2,
+        stroke = 0.45,
+        color = "black"
+      )
+    ) +
+      theme(
+        axis.text.y = element_text(size = 7),
+        axis.title.y = element_blank(),
+        plot.margin = margin(0, 0, 0, 0, "cm")
+      ),
+    themes = upset_modify_themes(
+      list(
+        intersections_matrix = theme(
+          text = element_text(size = 7),
+          plot.margin = margin(0, 0, 0, 0, "cm")
+        ),
+        overall_sizes = theme(
+          axis.text.x = element_text(size = 7),
+          plot.margin = margin(0, 0, 0, 0, "cm")
+        )
+      )
+    ),
+    sort_sets = FALSE,
+    sort_intersections = FALSE,
+    name = paste0(celltype_plot, " ", reg_status)
+  ) +
+    theme(
+      plot.title = element_text(size = 7, face = "plain", hjust = 0.5),
+      plot.margin = margin(0.2, 0.05, 0.1, 0.05, "cm")
+    )
+}
+
+make_gene_list <- function(direction_use) {
+  
+  list_input <- list()
+  
+  for (comparison in comparison_order) {
+    
+    short_name <- strsplit(comparison, "_vs_")[[1]][1]
+    
+    if (direction_use == "Up") {
+      genes <- deg_all %>%
+        filter(
+          comparison == !!comparison,
+          p_val_adj <= padj_cutoff,
+          avg_log2fc >= up_logfc_cutoff
+        ) %>%
+        pull(gene) %>%
+        unique()
+    }
+    
+    if (direction_use == "Down") {
+      genes <- deg_all %>%
+        filter(
+          comparison == !!comparison,
+          p_val_adj <= padj_cutoff,
+          avg_log2fc <= down_logfc_cutoff
+        ) %>%
+        pull(gene) %>%
+        unique()
+    }
+    
+    list_input[[short_name]] <- genes
+  }
+  
+  list_input
+}
+
+down_list_input <- make_gene_list("Down")
+up_list_input <- make_gene_list("Up")
+
+down_data <- fromList_safe(down_list_input)
+up_data <- fromList_safe(up_list_input)
+
+write.table(
+  down_data,
+  file.path(output_dir, paste0(celltype_raw, "_downregulated_UpSet_input_LBDtypes_vs_AD.tsv")),
+  sep = "\t",
+  quote = FALSE,
+  col.names = NA
+)
+
+write.table(
+  up_data,
+  file.path(output_dir, paste0(celltype_raw, "_upregulated_UpSet_input_LBDtypes_vs_AD.tsv")),
+  sep = "\t",
+  quote = FALSE,
+  col.names = NA
+)
+
+p_down_upset <- generate_upset_plot(
+  data = down_data,
+  reg_status = "downregulated",
+  dot_color = down_col
+)
+
+p_up_upset <- generate_upset_plot(
+  data = up_data,
+  reg_status = "upregulated",
+  dot_color = up_col
+)
+
+p_down_upset
+p_up_upset
+```
+
+# Metascape
+### Inh Neuron
+### UP
+```{r}
+# read in enrichment analysis results
+shared_up_enrich_results <-
+  read.csv("../results/metascape_multilist_MAST_DEGs/interneuron_LBD_types_vs_AD_upregulated/Enrichment_heatmap/HeatmapSelectedGO.csv")
+shared_up_enrich_results$Description <-
+      gsub(
+       "negative regulation of cellular component organization",
+        "neg reg of cellular component organization",
+        shared_up_enrich_results$Description
+      )
+shared_up_enrich_results$Description <-
+      gsub(
+       "regulation of plasma membrane bounded cell projection organization",
+        "reg plasma membrane bounded cell proj org",
+        shared_up_enrich_results$Description
+      )
+
+
+shared_up_enrich_results$Description <-
+      gsub(
+       "positive regulation of cellular component biogenesis",
+        "pos reg of cellular component biogenesis",
+        shared_up_enrich_results$Description
+      )
+
+shared_up_enrich_results$Description <-
+      gsub(
+       "Signaling by Rho GTPases, Miro GTPases and RHOBTB3",
+        "Signaling Rho & Miro GTPases, RHOBTB3",
+        shared_up_enrich_results$Description
+      )
+
+shared_up_enrich_results$Description <-
+      gsub(
+       "Diseases of signal transduction by growth factor receptors and second messengers",
+        "Diseases of signal transduction",
+        shared_up_enrich_results$Description
+      )
+shared_up_enrich_results$Description <- factor(shared_up_enrich_results$Description, levels = shared_up_enrich_results$Description)
+shared_up_enrich_results <- reshape2::melt(shared_up_enrich_results)
+
+shared_up_enrich_results$variable <-
+      gsub(
+       "X_LogP_LBD_S_vs_AD_AT",
+        "LBD (S)",
+        shared_up_enrich_results$variable
+      )
+shared_up_enrich_results$variable <-
+      gsub(
+       "X_LogP_LBD_AS_vs_AD_AT",
+        "LBD (AS)",
+        shared_up_enrich_results$variable
+      )
+shared_up_enrich_results$variable <-
+      gsub(
+       "X_LogP_LBD_ATS_vs_AD_AT",
+        "LBD (ATS)",
+        shared_up_enrich_results$variable
+      )
+shared_up_enrich_results$variable <- factor(shared_up_enrich_results$variable, levels = c("LBD (S)", "LBD (AS)", "LBD (ATS)"))
+# plot - up
+shared_up_enric_heatmap <- 
+  ggplot(shared_up_enrich_results, aes(variable, fct_rev(Description), fill= value)) + 
+  geom_tile() +
+  scale_y_discrete(expand = c(0, 0)) +
+  labs(x = "", y = "") +
+  guides(fill = guide_legend(
+    size = 1,
+    title = expression(log[10] ~ 
+"(" ~ italic("p") ~ "")
+  )) +
+  scale_fill_gradientn(
+    colours = c("#7A5200", "#FFB90F", "#FFF2B2"),
+    values = scales::rescale(c(-50, -35, -20, -10, -1)), 
+    breaks = c(-50, -35, -20, -10, -1), 
+    guide = "legend",
+    limits = c(-50,-1)
+  ) +  theme_bw() +
+    theme(strip.text = element_text(size = 7), 
+          axis.text.y = element_text(size = 7),
+          axis.text.x = element_text(size = 7, angle = 45, hjust = 1),
+          axis.title.x = element_text(size = 7), 
+          legend.text = element_text(size = 7),
+          legend.title = element_text(size = 7),
+          legend.margin=margin(0,0.025,0,0),
+          legend.box.margin=margin(-10,0.5,-10,-8.75), 
+          plot.margin = margin(0.5, 0.025, 0.01, -0.2, "cm"), #t,r,b,l
+          plot.title = element_text(size = 8, margin = margin(.1,.1,.1,0), hjust = 2.25)) 
+# + ggtitle("Up-regulated enrichment summaries")
+
+addSmallLegend <- function(shared_up_enric_heatmap, pointSize = 1.75, textSize = 5, spaceLegend = .5) {
+    shared_up_enric_heatmap +
+        guides(shape = guide_legend(override.aes = list(size = pointSize)),
+               color = guide_legend(override.aes = list(size = pointSize))) +
+        theme(legend.title = element_text(size = textSize), 
+              legend.position = "right",
+              legend.text  = element_text(size = textSize),
+              legend.key.size = unit(spaceLegend, "lines"))
+}
+# Apply on original plot
+shared_up_enric_heatmap <- addSmallLegend(shared_up_enric_heatmap)
+shared_up_enric_heatmap
+```
+
+### Down
+```{r down_heat}
+#--------
+# down
+shared_down_enrich_results <- read.csv("../results/metascape_multilist_MAST_DEGs/interneuron_LBD_types_vs_AD_downregulated/Enrichment_heatmap/HeatmapSelectedGO.csv")
+shared_down_enrich_results$Description <-
+      gsub(
+       "plasma membrane bounded cell projection assembly",
+        "plasma membrane bounded cell projection",
+        shared_down_enrich_results$Description
+      )
+
+shared_down_enrich_results$Description <-
+      gsub(
+       "Pathways of neurodegeneration − multiple diseases",
+        "Pathways of neurodegeneration",
+        shared_down_enrich_results$Description
+      )
+
+Pathways of neurodegeneration − multiple diseases
+shared_down_enrich_results$Description <- factor(shared_down_enrich_results$Description, levels = shared_down_enrich_results$Description)
+shared_down_enrich_results <- reshape2::melt(shared_down_enrich_results)
+
+shared_down_enrich_results$variable <-
+      gsub(
+       "X_LogP_LBD_S_vs_AD_AT",
+        "LBD (S)",
+        shared_down_enrich_results$variable
+      )
+shared_down_enrich_results$variable <-
+      gsub(
+       "X_LogP_LBD_AS_vs_AD_AT",
+        "LBD (AS)",
+        shared_down_enrich_results$variable
+      )
+shared_down_enrich_results$variable <-
+      gsub(
+       "X_LogP_LBD_ATS_vs_AD_AT",
+        "LBD (ATS)",
+        shared_down_enrich_results$variable
+      )
+
+shared_down_enrich_results$variable <- factor(shared_down_enrich_results$variable, levels = c("LBD (S)", "LBD (AS)", "LBD (ATS)"))
+# plot - down
+shared_down_enric_heatmap <- 
+  ggplot(shared_down_enrich_results, aes(variable, fct_rev(Description), fill= value)) + 
+  geom_tile() +
+  scale_y_discrete(expand = c(0, 0)) +
+  labs(x = "", y = "") +
+  guides(fill = guide_legend(
+    size = 1,
+    title = expression(log[10] ~ 
+"(" ~ italic("p") ~ ")")
+  )) +
+  scale_fill_gradientn(
+    colours = c("#556B2F", "#6E8B3D", "#DDE8C8"),
+    values = scales::rescale(c(-50, -35, -20, -10, -1)), 
+    breaks = c(-50, -35, -20, -10, -1), 
+    guide = "legend",
+    limits = c(-50,-1)
+    ) + theme_bw() +
+    theme(strip.text = element_text(size = 7), 
+          axis.text.y = element_text(size = 7),
+          axis.text.x = element_text(size = 7, angle = 45, hjust = 1),
+          axis.title.x = element_text(size = 7), 
+          legend.text = element_text(size = 7),
+          legend.title = element_text(size = 7),
+          legend.margin=margin(0,0.5,0,0),
+          legend.box.margin=margin(-10,0,-10,-8.5), 
+          plot.margin = margin(0.5, 0.05, 0.01, 0.0, "cm"), #t,r,b,l
+          plot.title = element_text(size = 8, margin = margin(.1,.1,.1,0), hjust = 1.95))
+# + ggtitle("Down-regulated enrichment summaries")
+
+addSmallLegend <- function(shared_down_enric_heatmap, pointSize = 1.75, textSize = 5, spaceLegend = .5) {
+    shared_down_enric_heatmap +
+        guides(shape = guide_legend(override.aes = list(size = pointSize)),
+               color = guide_legend(override.aes = list(size = pointSize))) +
+        theme(legend.title = element_text(size = textSize), 
+              legend.position = "right",
+              legend.text  = element_text(size = textSize),
+              legend.key.size = unit(spaceLegend, "lines"))
+}
+# Apply on original plot
+shared_down_enric_heatmap <- addSmallLegend(shared_down_enric_heatmap)
+shared_down_enric_heatmap
+```
+
+# Number of DEGs
+```{r}
+library(dplyr)
+library(readr)
+library(purrr)
+library(ggplot2)
+library(forcats)
+library(tidyr)
+library(stringr)
+library(grid)
+
+# -----------------------------
+# Helper functions
+# -----------------------------
+
+addSmallLegend <- function(myPlot, pointSize = 1, textSize = 7, spaceLegend = 0.5) {
+  myPlot +
+    guides(
+      fill = guide_legend(override.aes = list(size = pointSize))
+    ) +
+    theme(
+      legend.title = element_text(size = textSize),
+      legend.text  = element_text(size = textSize),
+      legend.key.size = unit(spaceLegend, "lines"),
+      legend.margin = margin(t = 0, r = 0, b = 0, l = -0.25, unit = "cm")
+    )
+}
+
+safe_read_deg <- safely(function(path) {
+  ext <- tools::file_ext(path)
+  
+  if (ext == "csv") {
+    readr::read_csv(path, show_col_types = FALSE)
+  } else {
+    readr::read_tsv(path, show_col_types = FALSE)
+  }
+}, otherwise = NULL)
+
+# -----------------------------
+# User inputs / thresholds
+# -----------------------------
+
+main_output_dir <- "/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/results/DEGs_MAST_RNA_pct0.25"
+output_dir <- "/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/results/DEG_bidirectional_interneuron_LBDtypes_vs_AD"
+
+dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+
+celltype_raw <- "interneuron"
+celltype_plot <- "inh. neuron"
+
+up_logfc_cutoff <- 0.25
+down_logfc_cutoff <- -0.25
+padj_cutoff <- 0.05
+
+# -----------------------------
+# Comparison labels and order
+# -----------------------------
+
+comparisons_to_plot <- list(
+  S   = c("LBD_S",   "AD_AT"),
+  AS  = c("LBD_AS",  "AD_AT"),
+  ATS = c("LBD_ATS", "AD_AT")
+)
+
+comparison_order <- c(
+  "LBD_S_vs_AD_AT",
+  "LBD_AS_vs_AD_AT",
+  "LBD_ATS_vs_AD_AT"
+)
+
+comparison_labels <- c(
+  "LBD_S_vs_AD_AT"   = "LBD (S)",
+  "LBD_AS_vs_AD_AT"  = "LBD (AS)",
+  "LBD_ATS_vs_AD_AT" = "LBD (ATS)"
+)
+
+# -----------------------------
+# Read DEG files and count up/down
+# -----------------------------
+
+deg_counts <- map_dfr(names(comparisons_to_plot), function(label) {
+  
+  pair <- comparisons_to_plot[[label]]
+  group1 <- pair[1]
+  group2 <- pair[2]
+  
+  comparison <- paste0(group1, "_vs_", group2)
+  
+  fname <- file.path(
+    main_output_dir,
+    celltype_raw,
+    paste0("DEG_", celltype_raw, "_", comparison, ".tsv")
+  )
+  
+  if (!file.exists(fname)) {
+    stop("File not found: ", fname)
+  }
+  
+  df <- safe_read_deg(fname)$result
+  
+  if (is.null(df)) {
+    stop("Could not read file: ", fname)
+  }
+  
+  df <- df %>%
+    rename_with(~ tolower(.x))
+  
+  required_cols <- c("gene", "avg_log2fc", "p_val_adj")
+  if (!all(required_cols %in% colnames(df))) {
+    stop("Missing required columns in: ", fname)
+  }
+  
+  df %>%
+    mutate(
+      direction = case_when(
+        !is.na(p_val_adj) & !is.na(avg_log2fc) &
+          p_val_adj <= padj_cutoff & avg_log2fc >= up_logfc_cutoff ~ "Up",
+        
+        !is.na(p_val_adj) & !is.na(avg_log2fc) &
+          p_val_adj <= padj_cutoff & avg_log2fc <= down_logfc_cutoff ~ "Down",
+        
+        TRUE ~ NA_character_
+      )
+    ) %>%
+    filter(!is.na(direction)) %>%
+    dplyr::count(direction, name = "n") %>%
+    mutate(
+      comparison = comparison,
+      disease_group = label
+    )
+})
+
+# -----------------------------
+# Fill missing combinations
+# -----------------------------
+
+deg_counts <- expand_grid(
+  comparison = comparison_order,
+  direction = c("Down", "Up")
+) %>%
+  left_join(
+    deg_counts,
+    by = c("comparison", "direction")
+  ) %>%
+  mutate(
+    n = replace_na(n, 0),
+    disease_group = case_when(
+      comparison == "LBD_S_vs_AD_AT" ~ "S",
+      comparison == "LBD_AS_vs_AD_AT" ~ "AS",
+      comparison == "LBD_ATS_vs_AD_AT" ~ "ATS"
+    ),
+    plot_label = recode(comparison, !!!comparison_labels),
+    plot_label = factor(
+      plot_label,
+      levels = comparison_labels[comparison_order]
+    ),
+    direction = factor(direction, levels = c("Down", "Up")),
+    value = if_else(direction == "Down", -n, n)
+  )
+
+# -----------------------------
+# Save count table
+# -----------------------------
+
+write_tsv(
+  deg_counts,
+  file.path(output_dir, paste0(celltype_raw, "_bidirectional_DEG_counts_LBDtypes_vs_AD.tsv"))
+)
+
+# -----------------------------
+# X-axis scaling
+# -----------------------------
+
+max_count <- max(deg_counts$n, na.rm = TRUE)
+max_abs_x <- ceiling(max_count * 1.25 / 10) * 10
+
+if (max_abs_x == 0) {
+  max_abs_x <- 10
+}
+
+# -----------------------------
+# Plot
+# -----------------------------
+deg_counts
+
+p_inh_neuron <- ggplot(
+  deg_counts,
+  aes(x = value, y = celltype_plot, fill = direction)
+) +
+  geom_col(width = 0.65) +
+
+  geom_text(
+    data = deg_counts %>% filter(n > 0),
+    aes(
+      label = as.character(n),
+      x = value,
+      hjust = if_else(value < 0, 1.1, -0.1)
+    ),
+    size = 6 / .pt,
+    color = "black"
+  ) +
+
+  geom_vline(xintercept = 0, linewidth = 0.25, color = "black") +
+
+  scale_fill_manual(
+    values = c(
+      "Down" = "darkolivegreen4",
+      "Up" = "darkgoldenrod1"
+    )
+  ) +
+
+  # 🔥 UPDATED AXIS
+  scale_x_continuous(
+    limits = c(-5500, 5500),
+    breaks = c(-2000, 0, 2000),
+    labels = function(x) abs(x),
+    expand = c(0, 0)
+  ) +
+
+  facet_grid(
+    plot_label ~ .,
+    switch = "y"
+  ) +
+
+  labs(
+    title = "LBD vs AD DEGs inh. neuron\nadjusted p-value < 0.05 & |log2FC| > 0.25",
+    x = NULL,
+    y = NULL,
+    fill = "Direction"
+  ) +
+
+  theme_classic() +
+
+  theme(
+    text = element_text(size = 7),
+    axis.title.x = element_text(size = 7),
+    axis.title.y = element_text(size = 7),
+    axis.text.x = element_text(size = 7),
+    axis.text.y = element_blank(),
+    plot.title = element_text(size = 7, face = "plain", hjust = 0.5),
+    axis.ticks.y = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_blank(),
+    strip.background = element_rect(fill = "gray90", color = NA),
+    strip.text.y.left = element_text(face = "plain", size = 7, angle = 0),
+    strip.placement = "outside",
+    legend.title = element_text(size = 7),
+    legend.text = element_text(size = 7),
+    legend.position = "right",
+    plot.margin = margin(0.2, 0.025, 0.25, 0.05, "cm")  # 🔥 slightly wider margins
+  )
+
+p_inh_neuron <- addSmallLegend(p_inh_neuron)
+
+print(p_inh_neuron)
+
+# -----------------------------
+# Save plot
+# -----------------------------
+
+ggsave(
+  filename = file.path(output_dir, paste0(celltype_raw, "_bidirectional_DEG_counts_inh_neuron_LBDtypes_vs_AD.pdf")),
+  plot = p_inh_neuron,
+  width = 4,
+  height = 5,
+  units = "in",
+  useDingbats = FALSE
+)
+
+ggsave(
+  filename = file.path(output_dir, paste0(celltype_raw, "_bidirectional_DEG_counts_inh_neuron.png")),
+  plot = p_inh_neuron,
+  width = 4,
+  height = 5,
+  units = "in",
+  dpi = 300
+)
+```
+
+# Save
+```{r}
+# Combined
+row1 <- ggarrange(
+  p_inh_neuron,
+  p_down_upset,
+  p_up_upset,
+  ncol = 3,
+  labels = c("F", "G", "H"), 
+  font.label = list(size = 10)
+)
+row2 <- ggarrange(
+  shared_down_enric_heatmap,
+  shared_up_enric_heatmap,
+  ncol = 2,
+  labels = c("I", "J"), 
+  font.label = list(size = 10)
+)
+
+Figure_neuron <- ggarrange(
+  row1, 
+  row2,
+  nrow = 2,
+  heights = c(0.45, 1),
+  font.label = list(size = 10))
+
+Figure_neuron
+path <- paste0("/tgen_labs/jfryer/kolney/LBD_CWOW/LBD_snRNA/manuscript_figures/Figure_inh_GO_LBDtypes_vs_AD")
+saveToPDF(paste0(path, ".pdf"), width = 6.5, height = 4.5)
+```
